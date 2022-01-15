@@ -1,23 +1,44 @@
-import requests
+import os
+from channel import channels_vice as vice
+from channel import channels_didyouknow as dyk
+from utils import telefunctions as tf
 
 from flask import Flask, request
 
 app = Flask(__name__)
+bot_token = os.environ.get('BOT_TOKEN')
 
 
-@app.route('/', methods=['GET'])
-def get_root():
-    r = requests.get(
-        "https://api.telegram.org/bot1651613683:AAEsfNziIczgMWs122wYUyES_A-boBwK5SQ/sendMessage?chat_id=-1001626784462&text={}".format(
-            str(request.get_data())))
-    return "Hello there"
+@app.route('/channel/vice/post/one')
+def process_vice_one():
+    # placeholder
+    tf.send_message(message_text=vice.get_caption_text())
+    print("@@ Vice one complete")
+    return "@@ Vice one complete"
 
 
-@app.route('/', methods=['POST'])
-def post_root():
-    r = requests.get("https://api.telegram.org/bot1651613683:AAEsfNziIczgMWs122wYUyES_A-boBwK5SQ/sendMessage?chat_id=-1001626784462&text={}".format(str(request.get_data())))
-    print("That post json here is: " + str(request.get_json()))
-    return "Hello you and your post call"
+@app.route('/channel/didyouknow/post/one')
+def process_dyk_one():
+    # placeholder
+    tf.send_test_message()
+    print("@@ Did you know one complete")
+    return "@@ Did you know one complete"
+
+
+@app.route('/channel/didyouknow/post/two')
+def process_dyk_two():
+    # placeholder
+    tf.send_test_message()
+    print("@@ Did you know two complete")
+    return "@@ Did you know two complete"
+
+
+@app.route('/channel/didyouknow/post/three')
+def process_dyk_three():
+    # placeholder
+    tf.send_test_message()
+    print("@@ Did you know three complete")
+    return "@@ Did you know three complete"
 
 
 if __name__ == '__main__':
