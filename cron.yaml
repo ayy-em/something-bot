@@ -1,0 +1,17 @@
+cron:
+- description: "Vice News - Basic - Daily Post"
+  url: /channel/vice/post/one
+  schedule: every day 13:00
+  timezone: Europe/Amsterdam
+- description: "Did You Know - Reddit - Daily Post"
+  url: /channel/didyouknow/post/one
+  schedule: every day 10:00
+  timezone: Europe/Amsterdam
+- description: "Did You Know - Wiki Fact - Daily Post"
+  url: /channel/didyouknow/post/two
+  schedule: every day 14:00
+  timezone: Europe/Amsterdam
+- description: "Did You Know - This Day - Daily Post"
+  url: /channel/didyouknow/post/three
+  schedule: every day 18:00
+  timezone: Europe/Amsterdam

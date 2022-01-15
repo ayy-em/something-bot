@@ -1,0 +1,5 @@
+.idea
+app.yaml
+venv/*
+stuff.txt
+.gcloudignore
