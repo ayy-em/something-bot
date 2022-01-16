@@ -13,33 +13,20 @@ bot_token = os.environ.get('BOT_TOKEN')
 def process_vice_one():
     vice_text = vice.get_vice()
     if vice_text:
-        tf.send_message(text=vice_text)
+        tf.send_message(text=vice_text, chat_id="@vice_news")
     print("@@ Vice one complete")
     return "@@ Vice one complete"
 
 
-@app.route('/channel/didyouknow/post/one')
-def process_dyk_one():
-    # placeholder
-    tf.send_test_message()
-    print("@@ Did you know one complete")
-    return "@@ Did you know one complete"
-
-
-@app.route('/channel/didyouknow/post/two')
-def process_dyk_two():
-    # placeholder
-    tf.send_test_message()
-    print("@@ Did you know two complete")
-    return "@@ Did you know two complete"
-
-
-@app.route('/channel/didyouknow/post/three')
-def process_dyk_three():
-    # placeholder
-    tf.send_test_message()
-    print("@@ Did you know three complete")
-    return "@@ Did you know three complete"
+@app.route('/channel/didyouknow/post/<thing>')
+def process_dyk_one(thing):
+    dyk_stuff = dyk.get_dyk(thing)
+    if isinstance(dyk_stuff, list):
+        tf.send_photo(caption=dyk_stuff[0], photo=dyk_stuff[1], chat_id="@rfn_didyouknow")
+    else:
+        tf.send_message(text=dyk_stuff, chat_id="@rfn_didyouknow")
+    print(f"@@ Did you know {thing} complete")
+    return f"@@ Did you know {thing} complete"
 
 
 if __name__ == '__main__':

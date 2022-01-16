@@ -4,14 +4,10 @@ import datetime
 from utils import reddit as reddit_api
 
 
-# channels_didyouknow.py wakes up via that function from a main.py call
-def get_dyk_post():
-    today_weekday = datetime.date.today().weekday()
-    now_hrs = datetime.datetime.now().hour
-    print('LOG: Today hour: ' + str(datetime.datetime.now().hour))
-    if now_hrs in range(10):
+def get_dyk(thing):
+    if thing == 'one':
         fin_text_and_photo = get_this_day_in_history()
-    elif now_hrs in range(10, 16):
+    elif thing == 'two':
         fin_text_and_photo = get_wikipedia_dyk()
     else:
         fin_text_and_photo = get_reddit_dyk()
