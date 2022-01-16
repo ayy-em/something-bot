@@ -4,11 +4,26 @@ import datetime
 import lxml
 
 
+wkday = datetime.date.today().weekday()
+daynum = datetime.date.today().day
+
+
+def get_vice():
+    if wkday in [0, 2, 4, 6]:
+        return None
+    else:
+        return get_caption_text()
+
+
 def get_caption_text():
-    # New topic every day
-    what_list = ['tech', 'music', 'food', 'drugs', 'entertainment', 'health', 'news']
-    wkday_num = datetime.date.today().weekday()
-    v_theme = what_list[wkday_num]
+    if wkday == 1:
+        themenum = daynum % 7
+        themelist = ['tech', 'shopping', 'drugs', 'health', 'music', 'entertainment', 'food']
+        v_theme = themelist[themenum]
+    elif wkday == 3:
+        v_theme = 'world'
+    else:
+        v_theme = 'news'
     # gets a list from the function below
     list_vice = get_vice_theme(v_theme)
     v_title = escape_shit(list_vice[0])
@@ -17,12 +32,12 @@ def get_caption_text():
     v_link = escape_shit(list_vice[3])
     v_emoji = list_vice[4]
     # Tear the list apart to compile string once again & get an image
-    vice_final_content_string = '*' + v_title + '*\n\n' + v_snippet + '\n\n' + "Posted in \\#{} {} \\ \n[Read the article by {}\\.]({})".format(str.capitalize(v_theme), v_emoji, v_author, v_link)
+    vice_final_content_string = '*' + v_title + '*\n\n' + v_snippet + "\n\n \\#{} {} \\- [Article by {}\\.]({})".format(str.capitalize(v_theme), v_emoji, v_author, v_link)
     return vice_final_content_string
 
 
 def get_vice_theme(theme):
-    print('-- LOG - Trying to post vice {} --'.format(theme))
+    print('@@ Trying to post vice {}'.format(theme))
     # i'm totally not a bot
     page = requests.get('https://www.vice.com/en_us/section/' + str(theme))
     emoji_dict = {
@@ -32,7 +47,9 @@ def get_vice_theme(theme):
         'drugs': '💊',
         'health': '🏥',
         'entertainment': '💃',
-        'news': '📰'
+        'news': '📰',
+        'shopping': '🛒',
+        'world': '🌎'
     }
     vice_emoji = emoji_dict.get(theme, '📰')
     # Start scraping: soup -> navigate thru page, find what we need, blah blah

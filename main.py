@@ -11,8 +11,9 @@ bot_token = os.environ.get('BOT_TOKEN')
 
 @app.route('/channel/vice/post/one')
 def process_vice_one():
-    # placeholder
-    tf.send_message(message_text=vice.get_caption_text())
+    vice_text = vice.get_vice()
+    if vice_text:
+        tf.send_message(text=vice_text)
     print("@@ Vice one complete")
     return "@@ Vice one complete"
 
