@@ -2,6 +2,12 @@
 
 Talk to me at https://t.me/SomethingReallyBot at any time, day and night, baby, day and night.
 
+### Tech Stack
+
+- Python 3.9
+- Google App Engine with Cloud Scheduler-managed cron jobs
+- Telegram BOT API connection via webhook
+
 ### What does this bot do?
 
 Things, that's what. Just shoot me a message.

@@ -5,7 +5,7 @@ from utils import reddit as reddit_api
 
 
 def get_dyk(thing):
-    if thing == 'one':
+    if thing == 'three':
         fin_text_and_photo = get_this_day_in_history()
     elif thing == 'two':
         fin_text_and_photo = get_wikipedia_dyk()

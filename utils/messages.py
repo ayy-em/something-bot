@@ -32,7 +32,7 @@ def send_photo(caption, photo, chat_id=test_channel_id, parse_mode='MarkdownV2',
     print("@@ Message Request Sent - Response: " + str(r.text))
 
 
-def send_test_message():
-    test_request_url = base_url + "sendMessage?chat_id={}&text=TestRequestDone&disable_notification=True".format(test_channel_id)
-    r = requests.get(test_request_url)
+def send_test_message(txt='WhateverTestyTest'):
+    test_req_url = base_url + "sendMessage?chat_id={}&text={}&disable_notification=True".format(test_channel_id, txt)
+    r = requests.get(test_req_url)
     print("@@ Test Message Request Sent - Response: {}".format(r.text))
