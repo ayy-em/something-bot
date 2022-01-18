@@ -1,8 +1,4 @@
-import random
-import string
-
-
-# lots of text here, functions at the bottom
+# strings that mean you're greeting the bot
 hi_msg = [
     "hi",
     "hello",
@@ -22,22 +18,37 @@ hi_msg = [
     "yooo"
 ]
 
-# reply to the start message, given by get_start_msg()
-reply_start = "Hello there! I can help you do a lot of things.\n\n/weather - shows up-to-date weather in Amsterdam.\n/fact - get a random fun fact!\n/batavia - get Cafe Batavia menu.\nYou can also just talk to me, but i'm pretty stupid.\n\nMake sure to check out the channels i run: @vice_news (English), @adam24live (Russian), @ayy_maps (Russian)\n\nAnd definitely visit somethingreally.fun (permanent work in progress)! \nCheers."
+# reply to the start command
+start_message_response = "Hello there! 👋 " \
+                         "\nI can help you with quite a lot of things." \
+              "\n\n/start - get this message again (for some reason)" \
+              "\n/weather - tells you up-to-date weather" \
+              "\n/fact - get a random fun fact!" \
+              "\n/batavia - get Cafe Batavia 1920 menu right here" \
+              "\n\nYou can also just speak with me, but i'm pretty stupid." \
+              "\n\nAnd make sure to check out the channels i run: " \
+              "\n@maymays_unlimited (English) - Three memes a day keep the therapist away" \
+              "\n@vice_news (English) - This bot posts fresh Vice news three times a week" \
+              "\n@adam24live (Russian) - My lazy owner tries posting there consistently (ha!)" \
+              "\n@ayy_maps (Russian) - Half-abandoned hobby of mine" \
+              "\n\nYou can also reach me at @ayy_yo" \
+              "\nCheers!"
 
-# given by get_reply_string() if it's something a bot does not recognize
-reply_unknown = [
+# response to something a bot does not recognize
+unknown_message_response = [
     "I have no idea what you mean.",
     "What?",
     "I don't get it",
     "I must be stupid because I don't understand you",
     "I'm sorry, what?",
+    "Is it me who's stupid or are you?",
+    "I know I'm dumb, but you can do much better as well. Just sayin'...",
     "wut",
     "You're confusing me.. What am I supposed to do?"
 ]
 
 # a list of fun facts
-reply_fun_fact = [
+fun_fact = [
     "Most elephants weigh less than a blue whale's tongue!",
     "Pineapples used to be so expensive that people would rent them as a centrepiece for their party.",
     "Scotland's national animal is a unicorn.",
@@ -47,6 +58,7 @@ reply_fun_fact = [
     "The colour red doesn't make bulls angry; they are colourblind.",
     "It snows metal on planet Venus.",
     "Bees tell their friends about good nearby flowers by dancing.",
+    "Just check out @rfn_didyouknow if you like the facts, yo!",
     "Kangaroos can't walk backwards.",
     "In Switzerland, it's illegal to own just one guinea pig; if you have any, you have to have at least two. They get lonely!",
     "Otters have skin pockets for their favorite rocks.",
@@ -74,42 +86,3 @@ reply_fun_fact = [
     "A blue whale's heart is as big as a Volkswagen Beetle.",
     "Oxford University is older than the Aztec empire."
 ]
-
-
-# Process incoming message (from reply.py) and return the reply string
-def get_reply_string(reply_to_check):
-    is_it_hi = check_contains_hi(reply_to_check)
-    if is_it_hi:
-        reply_string = get_hi()
-    else:
-        reply_string = random.choice(reply_unknown)
-    return reply_string
-
-
-# when commanded, returns a string with a random fact
-def get_reply_fact():
-    reply_msg_text = random.choice(reply_fun_fact)
-    return reply_msg_text
-
-
-# gets this bot's start message
-def get_start_msg():
-    reply_msg_start = str(reply_start)
-    return reply_msg_start
-
-
-# check if the message contains a greeting, return T/F
-def check_contains_hi(msg):
-    msg_check_str = msg.strip(string.punctuation)
-    msg_check_str_low = msg_check_str.lower()
-    if msg_check_str_low in hi_msg:
-        return True
-    else:
-        return False
-
-
-# not really needed as an additional function...
-def get_hi():
-    reply_msg_text_sm = random.choice(hi_msg)
-    reply_msg_text = reply_msg_text_sm.capitalize()
-    return reply_msg_text

@@ -19,7 +19,7 @@ def get_reddit_dyk():
     list_old = reddit_api.get_reddit_top_til()
     list_to_post = []
     for item_old in list_old:
-        item_old = escape_shit(item_old)
+        item_old = item_old
         list_to_post.append(item_old)
     fin_text = '*' + list_to_post[0] + '*_' + list_to_post[1] + '_[' + list_to_post[2] + '](' + list_to_post[3] + ')[' + list_to_post[4] + '](' + list_to_post[5] + ')'
     return fin_text
@@ -36,9 +36,9 @@ def get_wikipedia_dyk():
     # first item from "Did you know" div on wiki main
     li_dyk_post = ul_dyk_post.find_all('li')[0]
     dyk_link = 'https://en.wikipedia.org' + li_dyk_post.find_all('b')[0].a.get('href')
-    dyk_link = escape_shit(dyk_link)
+    dyk_link = dyk_link
     dyk_text = str(li_dyk_post.text)[4:]
-    dyk_text = escape_shit(dyk_text)
+    dyk_text = dyk_text
     # dont forget to escape any chars
     dyk_fact_text = "📆 *Fact of the day from Wikipedia* 💡\n\nDid you know " + dyk_text + "\n\n[Learn more on Wikipedia\.](" + dyk_link + ")"
     # after that, we go for a thumbnail to send with a caption
@@ -64,17 +64,8 @@ def get_this_day_in_history():
     for fact_item in ul_fact.children:
         item_year = fact_item.h3.text
         desc_year = fact_item.p.text
-        string_to_add = '*' + item_year + '*: ' + escape_shit(desc_year) + '\n'
+        string_to_add = '*' + item_year + '*: ' + desc_year + '\n'
         facts_string += string_to_add
     text_intro = '📆 This Day In History 📜'
     final_string = '*' + text_intro + '*\n\n' + facts_string
     return final_string
-
-
-def escape_shit(text):
-    chars = "_*[]()~`>#+-=|.!"
-    # does not escape curly braces so lets hope we don't encounter them
-    weird_stuff = '\\'
-    for c in chars:
-        text = text.replace(c, weird_stuff[0] + c)
-    return text

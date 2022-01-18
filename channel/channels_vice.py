@@ -26,10 +26,10 @@ def get_caption_text():
         v_theme = 'news'
     # gets a list from the function below
     list_vice = get_vice_theme(v_theme)
-    v_title = escape_shit(list_vice[0])
-    v_snippet = escape_shit(list_vice[1])
-    v_author = escape_shit(list_vice[2])
-    v_link = escape_shit(list_vice[3])
+    v_title = list_vice[0]
+    v_snippet = list_vice[1]
+    v_author = list_vice[2]
+    v_link = list_vice[3]
     v_emoji = list_vice[4]
     # Tear the list apart to compile string once again & get an image
     vice_final_content_string = '*' + v_title + '*\n\n' + v_snippet + "\n\n \\#{} {} \\- [Article by {}\\.]({})".format(str.capitalize(v_theme), v_emoji, v_author, v_link)
@@ -61,12 +61,3 @@ def get_vice_theme(theme):
     author = main_news_div.div.div.text
     link = main_news_div.h3.a['href']
     return [title_text, snippet_text, author, link, vice_emoji]
-
-
-def escape_shit(text):
-    chars = "_*[]()~`>#+-=|.!"
-    # does not escape curly braces so lets hope we don't encounter them
-    weird_stuff = '\\'
-    for c in chars:
-        text = text.replace(c, weird_stuff[0] + c)
-    return text

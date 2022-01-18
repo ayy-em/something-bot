@@ -72,7 +72,6 @@ class TextMessageUpdate(MessageUpdate):
         return self.text_message_text
 
 
-
 """
 class LocationMessage(MessageUpdate):
     def __init__(self, update):
@@ -86,7 +85,7 @@ class PollUpdate(MessageUpdate):
         poll_object = ''
         for opt in message_options:
             if opt in update:
-                poll_object = [str(opt)]['poll']
+                poll_object = [opt]['poll']
                 break
             else:
                 pass
@@ -112,7 +111,7 @@ class PollAnswerUpdate(MessageUpdate):
         poll_answer_object = ''
         for opt in message_options:
             if opt in update:
-                poll_answer_object = [str(opt)]['poll_answer']
+                poll_answer_object = [opt]['poll_answer']
                 break
             else:
                 pass

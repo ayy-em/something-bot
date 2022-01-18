@@ -1,6 +1,8 @@
 import os
 import requests
 
+from . import escape_shit as esc
+
 bot_token = os.environ.get('BOT_TOKEN')
 base_url = "https://api.telegram.org/bot{}/".format(bot_token)
 test_channel_id = os.environ.get('TEST_CHANNEL_CHAT_ID')
@@ -8,7 +10,7 @@ test_channel_id = os.environ.get('TEST_CHANNEL_CHAT_ID')
 
 def send_message(text, chat_id=test_channel_id, parse_mode='MarkdownV2', disable_notification=True, disable_web_page_preview=False):
     data_json = {
-        'text': text,
+        'text': esc.escape_shit(text),
         'chat_id': chat_id,
         'parse_mode': parse_mode,
         'disable_notification': disable_notification,
@@ -21,7 +23,7 @@ def send_message(text, chat_id=test_channel_id, parse_mode='MarkdownV2', disable
 
 def send_photo(caption, photo, chat_id=test_channel_id, parse_mode='MarkdownV2', disable_notification=True):
     data_json = {
-        'caption': caption,
+        'caption': esc.escape_shit(caption),
         'photo': photo,
         'chat_id': chat_id,
         'parse_mode': parse_mode,
@@ -33,6 +35,6 @@ def send_photo(caption, photo, chat_id=test_channel_id, parse_mode='MarkdownV2',
 
 
 def send_test_message(txt='WhateverTestyTest'):
-    test_req_url = base_url + "sendMessage?chat_id={}&text={}&disable_notification=True".format(test_channel_id, txt)
+    test_req_url = base_url + "sendMessage?chat_id={}&text={}&disable_notification=True".format(test_channel_id, esc.escape_shit(txt))
     r = requests.get(test_req_url)
     print("@@ Test Message Request Sent - Response: {}".format(r.text))

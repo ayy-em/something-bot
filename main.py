@@ -3,6 +3,7 @@ from channel import channels_vice as vice
 from channel import channels_didyouknow as dyk
 from utils import messages as msgs
 from utils import update_handler as uh
+from utils import response as rsp
 
 from flask import Flask, request
 
@@ -14,15 +15,7 @@ bot_token = os.environ.get('BOT_TOKEN')
 def process_post_update():
     if request.get_json():
         processed_update = uh.process_update(request.get_json())
-        if isinstance(processed_update, uh.TextMessageUpdate):
-            if processed_update.message_destination == 'direct':
-                msgs.send_message(text=processed_update.text_message_text, chat_id=processed_update.message_chat_from)
-            elif processed_update.message_destination == 'groupchat':
-                test_message_text = 'I got sent this in a group: ' + processed_update.text_message_text
-                msgs.send_test_message(txt=test_message_text)
-            elif processed_update.message_destination == 'channel':
-                test_message_text = 'I got sent this in a channel: ' + processed_update.text_message_text
-                msgs.send_test_message(txt=test_message_text)
+    rsp.respond_to(processed_update)
     print("@@ Processing update complete")
     return "@@ Processing update complete"
 
