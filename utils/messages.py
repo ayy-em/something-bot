@@ -1,16 +1,19 @@
 import os
 import requests
 
-from . import escape_shit as esc
-
 bot_token = os.environ.get('BOT_TOKEN')
 base_url = "https://api.telegram.org/bot{}/".format(bot_token)
 test_channel_id = os.environ.get('TEST_CHANNEL_CHAT_ID')
 
+"""
+    Important: Escape text before sending it to these functions!!!
+"""
 
-def send_message(text, chat_id=test_channel_id, parse_mode='MarkdownV2', disable_notification=True, disable_web_page_preview=False):
+
+def send_message(text, chat_id=test_channel_id, parse_mode='MarkdownV2', disable_notification=True,
+                 disable_web_page_preview=False):
     data_json = {
-        'text': esc.escape_shit(text),
+        'text': text,
         'chat_id': chat_id,
         'parse_mode': parse_mode,
         'disable_notification': disable_notification,
@@ -23,7 +26,7 @@ def send_message(text, chat_id=test_channel_id, parse_mode='MarkdownV2', disable
 
 def send_photo(caption, photo, chat_id=test_channel_id, parse_mode='MarkdownV2', disable_notification=True):
     data_json = {
-        'caption': esc.escape_shit(caption),
+        'caption': caption,
         'photo': photo,
         'chat_id': chat_id,
         'parse_mode': parse_mode,
@@ -35,6 +38,6 @@ def send_photo(caption, photo, chat_id=test_channel_id, parse_mode='MarkdownV2',
 
 
 def send_test_message(txt='WhateverTestyTest'):
-    test_req_url = base_url + "sendMessage?chat_id={}&text={}&disable_notification=True".format(test_channel_id, esc.escape_shit(txt))
+    test_req_url = base_url + "sendMessage?chat_id={}&text={}&disable_notification=True".format(test_channel_id, txt)
     r = requests.get(test_req_url)
     print("@@ Test Message Request Sent - Response: {}".format(r.text))

@@ -2,6 +2,7 @@ import requests
 from bs4 import BeautifulSoup
 import datetime
 from utils import reddit as reddit_api
+from utils import escape_shit as esc
 
 
 def get_dyk(thing):
@@ -19,13 +20,11 @@ def get_reddit_dyk():
     list_old = reddit_api.get_reddit_top_til()
     list_to_post = []
     for item_old in list_old:
-        item_old = item_old
-        list_to_post.append(item_old)
+        list_to_post.append(esc.escape_shit(item_old))
     fin_text = '*' + list_to_post[0] + '*_' + list_to_post[1] + '_[' + list_to_post[2] + '](' + list_to_post[3] + ')[' + list_to_post[4] + '](' + list_to_post[5] + ')'
     return fin_text
 
 
-# one of the HEAD responses is to post the wikipedia fact
 def get_wikipedia_dyk():
     # top "Did you know..." fact from wiki main
     lets_look_at_this_url = 'https://en.wikipedia.org/wiki/Main_Page'
@@ -40,7 +39,7 @@ def get_wikipedia_dyk():
     dyk_text = str(li_dyk_post.text)[4:]
     dyk_text = dyk_text
     # dont forget to escape any chars
-    dyk_fact_text = "📆 *Fact of the day from Wikipedia* 💡\n\nDid you know " + dyk_text + "\n\n[Learn more on Wikipedia\.](" + dyk_link + ")"
+    dyk_fact_text = "📆 *Fact of the day from Wikipedia* 💡\n\nDid you know " + esc.escape_shit(dyk_text) + "\n\n[Learn more on Wikipedia\.](" + esc.escape_shit(dyk_link) + ")"
     # after that, we go for a thumbnail to send with a caption
     page_to_get_highres = 'https://en.wikipedia.org' + div_dyk.div.div.a.get('href')
     page_img = requests.get(page_to_get_highres)
@@ -64,7 +63,7 @@ def get_this_day_in_history():
     for fact_item in ul_fact.children:
         item_year = fact_item.h3.text
         desc_year = fact_item.p.text
-        string_to_add = '*' + item_year + '*: ' + desc_year + '\n'
+        string_to_add = '*' + item_year + '*: ' + esc.escape_shit(desc_year) + '\n'
         facts_string += string_to_add
     text_intro = '📆 This Day In History 📜'
     final_string = '*' + text_intro + '*\n\n' + facts_string

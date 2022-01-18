@@ -1,5 +1,6 @@
 import random
 from . import strings
+from . import escape_shit as esc
 
 
 def process_command(command):

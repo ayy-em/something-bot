@@ -85,7 +85,7 @@ class PollUpdate(MessageUpdate):
         poll_object = ''
         for opt in message_options:
             if opt in update:
-                poll_object = [opt]['poll']
+                poll_object = update[opt]['poll']
                 break
             else:
                 pass
@@ -111,7 +111,7 @@ class PollAnswerUpdate(MessageUpdate):
         poll_answer_object = ''
         for opt in message_options:
             if opt in update:
-                poll_answer_object = [opt]['poll_answer']
+                poll_answer_object = update[opt]['poll_answer']
                 break
             else:
                 pass

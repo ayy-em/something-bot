@@ -9,10 +9,7 @@ def process_text(text):
 
 
 def check_if_greeting(text):
-    if text.lower() in strings.hi_msg:
-        return True
-    else:
-        return False
+    return True if text.lower() in strings.hi_msg else False
 
 
 def respond_unknown():
