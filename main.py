@@ -15,7 +15,7 @@ bot_token = os.environ.get('BOT_TOKEN')
 def process_post_update():
     if request.get_json():
         processed_update = uh.process_update(request.get_json())
-    rsp.respond_to(processed_update)
+        rsp.respond_to(processed_update)
     print("@@ Processing update complete")
     return "@@ Processing update complete"
 

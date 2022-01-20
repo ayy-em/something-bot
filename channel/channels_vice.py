@@ -1,6 +1,7 @@
 from bs4 import BeautifulSoup
 import requests
 import datetime
+from utils import escape_shit as esc
 import lxml
 
 
@@ -9,30 +10,30 @@ daynum = datetime.date.today().day
 
 
 def get_vice():
-    if wkday in [0, 2, 4, 6]:
-        return None
-    else:
-        return get_caption_text()
+    return None if wkday in [0, 2, 4, 6] else get_caption_text()
 
 
 def get_caption_text():
     if wkday == 1:
+        # Tuesday
         themenum = daynum % 7
         themelist = ['tech', 'shopping', 'drugs', 'health', 'music', 'entertainment', 'food']
         v_theme = themelist[themenum]
     elif wkday == 3:
+        # Thursday
         v_theme = 'world'
     else:
+        # Saturday
         v_theme = 'news'
     # gets a list from the function below
     list_vice = get_vice_theme(v_theme)
-    v_title = list_vice[0]
-    v_snippet = list_vice[1]
-    v_author = list_vice[2]
+    v_title = esc.escape_shit(list_vice[0])
+    v_snippet = esc.escape_shit(list_vice[1])
+    v_author = esc.escape_shit(list_vice[2])
     v_link = list_vice[3]
     v_emoji = list_vice[4]
     # Tear the list apart to compile string once again & get an image
-    vice_final_content_string = '*' + v_title + '*\n\n' + v_snippet + "\n\n \\#{} {} \\- [Article by {}\\.]({})".format(str.capitalize(v_theme), v_emoji, v_author, v_link)
+    vice_final_content_string = '*' + v_title + '*\n\n' + v_snippet + "\n\n\\#{} {} \\- [Article by {}]({})".format(str.capitalize(v_theme), v_emoji, v_author, v_link)
     return vice_final_content_string
 
 
