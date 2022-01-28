@@ -40,5 +40,13 @@ def process_dyk_one(thing):
     return f"@@ Did you know {thing} complete"
 
 
+@app.route('/poke/bettyford/tiktok')
+def poke_bettyford_tiktok():
+    msgs.send_message(text="👋 Hello ma'am\\! A message from sir\\.\nПора бы уже запостить пятничный Тикток\\!",
+                      chat_id="@bettyford")
+    print("@@ Poke Ira TikTok complete")
+    return "@@ Poke Ira TikTok complete"
+
+
 if __name__ == '__main__':
     app.run(host='127.0.0.1', port=8080, debug=True)
