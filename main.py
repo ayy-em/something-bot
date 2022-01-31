@@ -49,10 +49,10 @@ def poke_bettyford_tiktok():
     return "@@ Poke Ira TikTok complete"
 
 
-@app.route('/finco/query/yesterday/')
-def get_yesterday_finco_stats():
+@app.route('/finco/query/yesterday')
+def post_yesterday_finco_stats():
     text = fcd.get_fc_message('yesterday')
-    chat_id = os.environ.get('JM_TG_ID')
+    chat_id = os.environ.get('FC_GROUP_CHAT_ID')
     msgs.send_message(text=text, chat_id=chat_id)
     print("@@ FinCo query - Yesterday complete")
     return "@@ FinCo query - Yesterday complete"
