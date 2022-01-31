@@ -1,6 +1,7 @@
 import os
 from channel import channels_vice as vice
 from channel import channels_didyouknow as dyk
+from fc import fincodata as fcd
 from utils import messages as msgs
 from utils import update_handler as uh
 from utils import response as rsp
@@ -43,9 +44,18 @@ def process_dyk_one(thing):
 @app.route('/poke/bettyford/tiktok')
 def poke_bettyford_tiktok():
     msgs.send_message(text="👋 Hello ma'am\\! A message from sir\\.\nПора бы уже запостить пятничный Тикток\\!",
-                      chat_id="@bettyford")
+                      chat_id=159278882)
     print("@@ Poke Ira TikTok complete")
     return "@@ Poke Ira TikTok complete"
+
+
+@app.route('/finco/query/yesterday/')
+def get_yesterday_finco_stats():
+    text = fcd.get_fc_message('yesterday')
+    chat_id = os.environ.get('JM_TG_ID')
+    msgs.send_message(text=text, chat_id=chat_id)
+    print("@@ FinCo query - Yesterday complete")
+    return "@@ FinCo query - Yesterday complete"
 
 
 if __name__ == '__main__':
