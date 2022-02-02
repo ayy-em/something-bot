@@ -3,3 +3,5 @@ app.yaml
 venv/*
 stuff.txt
 .gcloudignore
+creds/*
+something-bot-338300-375c9c060f67.json
