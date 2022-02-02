@@ -57,7 +57,3 @@ def get_and_format_ga_data():
         string_to_add = '\n' + item[2] + ' visitors to ' + item[1] + ' from ' + item[0]
         ga_text = ga_text + string_to_add
     return ga_text
-
-
-if __name__ == '__main__':
-    get_fc_message('yesterday')
