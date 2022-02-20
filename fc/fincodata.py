@@ -28,14 +28,16 @@ def get_yesterday_text(query_period):
     text_one = '👋 ' + data_json['period']
     data_json.pop('period')
     clicks_total = len(data_json)
-    text_two = "\n\nRedirected to partners: {} users. Here's a list:\n".format(str(clicks_total))
+    if clicks_total > 0:
+        text_two = "\n\nRedirected to partners: {} users. Here's a list:\n".format(str(clicks_total))
+    else:
+        text_two = 'Redirected nobody to partners. Feels bad, man.'
     for click in data_json:
         text_line = '- ' + data_json[click]['when'][:5] + ' - ' + data_json[click]['where'] + ' - ' + data_json[click]['uc']
         text_two = text_two + text_line + '\n'
     text = text_one + text_two
     try:
-        text = text + '\nGA4 new user data for yesterday:'
-        text = text + get_and_format_ga_data()
+        text = get_and_format_ga_data()
     except Exception as e:
         msg.send_message(text=esc.escape_shit('Oh and btw, fetching GA data failed and this is why:'), chat_id=os.environ.get('FC_GROUP_CHAT_ID'))
         msg.send_message(text=esc.escape_shit(str(e)), chat_id=os.environ.get('FC_GROUP_CHAT_ID'))
@@ -51,9 +53,12 @@ def get_fc_data(query_period):
 
 def get_and_format_ga_data():
     from fc import google_analytics_query as gaq
-    ga_text = ''
     ga_list = gaq.get_ga_stats_for_yesterday()
+    gae_total_counter = 0
+    gae_google_counter = 0
     for item in ga_list:
-        string_to_add = '\n' + item[2] + ' visitors to ' + item[1] + ' from ' + item[0]
-        ga_text = ga_text + string_to_add
+        gae_total_counter = gae_total_counter + item[2]
+        if item[0] == 'google':
+            gae_google_counter = gae_google_counter + 1
+    ga_text = 'GA4: {} visitors, of which {} from Google search.'.format(gae_total_counter, gae_google_counter)
     return ga_text
