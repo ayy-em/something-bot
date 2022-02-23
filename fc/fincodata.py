@@ -57,7 +57,7 @@ def get_and_format_ga_data():
     gae_total_counter = 0
     gae_google_counter = 0
     for item in ga_list:
-        gae_total_counter = gae_total_counter + item[2]
+        gae_total_counter = gae_total_counter + int(item[2])
         if item[0] == 'google':
             gae_google_counter = gae_google_counter + 1
     ga_text = 'GA4: {} visitors, of which {} from Google search.'.format(str(gae_total_counter), str(gae_google_counter))

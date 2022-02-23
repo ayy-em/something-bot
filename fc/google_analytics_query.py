@@ -27,4 +27,3 @@ def get_ga_stats_for_yesterday():
         list_to_return.append([row.dimension_values[0].value, page_visited, row.metric_values[0].value])
     print(list_to_return)
     return list_to_return
-
