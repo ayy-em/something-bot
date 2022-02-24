@@ -1,4 +1,6 @@
 import os
+import time
+
 import requests
 
 from utils import escape_shit as esc
@@ -37,8 +39,9 @@ def get_yesterday_text(query_period):
         text_two = text_two + text_line + '\n'
     text = text_one + text_two
     try:
-        text = get_and_format_ga_data()
+        text = text + get_and_format_ga_data()
     except Exception as e:
+        time.sleep(5)
         msg.send_message(text=esc.escape_shit('Oh and btw, fetching GA data failed and this is why:'), chat_id=os.environ.get('FC_GROUP_CHAT_ID'))
         msg.send_message(text=esc.escape_shit(str(e)), chat_id=os.environ.get('FC_GROUP_CHAT_ID'))
     return esc.escape_shit(text)
