@@ -5,6 +5,7 @@ from fc import fincodata as fcd
 from utils import messages as msgs
 from utils import update_handler as uh
 from utils import response as rsp
+from stuff_for_ira import tiktok as tt
 
 from flask import Flask, request
 
@@ -43,9 +44,7 @@ def process_dyk_one(thing):
 
 @app.route('/poke/bettyford/tiktok')
 def poke_bettyford_tiktok():
-    msgs.send_message(text="👋 Hello ma'am\\! A message from sir\\.\nПора бы уже запостить пятничный Тикток\\!",
-                      chat_id=159278882)
-    print("@@ Poke Ira TikTok complete")
+    tt.poke_ira_for_tiktok()
     return "@@ Poke Ira TikTok complete"
 
 
