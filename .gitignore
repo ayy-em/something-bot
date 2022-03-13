@@ -1,6 +1,7 @@
 .idea
 app.yaml
 venv/*
+venv/
 stuff.txt
 .gcloudignore
 creds/*

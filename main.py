@@ -6,6 +6,7 @@ from utils import messages as msgs
 from utils import update_handler as uh
 from utils import response as rsp
 from stuff_for_ira import tiktok as tt
+from stuff_for_ira import dyson
 
 from flask import Flask, request
 
@@ -46,6 +47,12 @@ def process_dyk_one(thing):
 def poke_bettyford_tiktok():
     tt.poke_ira_for_tiktok()
     return "@@ Poke Ira TikTok complete"
+
+
+@app.route('/check/bettyford/dyson')
+def check_for_dyson():
+    dyson.check_and_report_dyson()
+    return '@@ Dyson check complete'
 
 
 @app.route('/finco/query/<query_name>')
