@@ -6,7 +6,7 @@ from utils import messages as msgs
 from utils import update_handler as uh
 from utils import response as rsp
 from stuff_for_ira import tiktok as tt
-from stuff_for_ira import dyson
+from stuff_for_ira import dyson as dys
 
 from flask import Flask, request
 
@@ -51,7 +51,7 @@ def poke_bettyford_tiktok():
 
 @app.route('/check/bettyford/dyson')
 def check_for_dyson():
-    dyson.check_and_report_dyson()
+    dys.check_and_report_dyson()
     return '@@ Dyson check complete'
 
 

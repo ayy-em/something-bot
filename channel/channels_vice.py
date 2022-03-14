@@ -4,7 +4,6 @@ import datetime
 from utils import escape_shit as esc
 import lxml
 
-
 wkday = datetime.date.today().weekday()
 daynum = datetime.date.today().day
 
@@ -33,7 +32,8 @@ def get_caption_text():
     v_link = list_vice[3]
     v_emoji = list_vice[4]
     # Tear the list apart to compile string once again & get an image
-    vice_final_content_string = '*' + v_title + '*\n\n' + v_snippet + "\n\n\\#{} {} \\- [Article by {}]({})".format(str.capitalize(v_theme), v_emoji, v_author, v_link)
+    vice_final_content_string = '*' + v_title + '*\n\n' + v_snippet + "\n\n\\#{} {} \\- [Article by {}]({})".format(
+        str.capitalize(v_theme), v_emoji, v_author, v_link)
     return vice_final_content_string
 
 

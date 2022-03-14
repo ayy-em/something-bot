@@ -26,7 +26,6 @@ cron:
 - description: "Check internet - Ira Dyson"
   url: /check/bettyford/dyson
   schedule: every 1 hours
-  timezone: Europe/Amsterdam
 - description: "FinCo - Send me yesterday clicks"
   url: /finco/query/yesterday
   schedule: every day 10:30

@@ -12,6 +12,15 @@ ira_messages = [
 ]
 
 
+def check_and_report_dyson():
+    did_it, where_did_it_arrive = check_if_dyson_arrived()
+    if did_it:
+        poke_ira_for_dyson(where_did_it_arrive)
+    else:
+        no_dyson_message = random.choice(ira_messages)
+        msgs.send_message(text=esc.escape_shit(no_dyson_message), chat_id=159278882)
+
+
 def check_dyson_nl():
     """
     :return: True if found, False if not
@@ -41,15 +50,6 @@ def check_dyson_nl():
     return dyson_detected
 
 
-def check_and_report_dyson():
-    did_it, where_did_it_arrive = check_if_dyson_arrived()
-    if did_it:
-        poke_ira_for_dyson(where_did_it_arrive)
-    else:
-        no_dyson_message = random.choice(ira_messages)
-        msgs.send_message(text=esc.escape_shit(no_dyson_message), chat_id=159278882)
-        
-
 def check_if_dyson_arrived():
     did_it_arrive = check_dyson_nl()
     where_did_it_arrive = 'https://www.dyson.nl/haarstyling/dyson-supersonic/overzicht'
@@ -57,14 +57,9 @@ def check_if_dyson_arrived():
 
 
 def poke_ira_for_dyson(where_is_it):
-    message_text = create_message_text() + '\n\n' + where_is_it
+    message_text = 'Hey Ira, Dyson tut uje, yo' + '\n\n' + where_is_it
     msgs.send_message(text=esc.escape_shit(message_text), chat_id=159278882, disable_notification=False)
     print("@@ Poke Ira TikTok complete")
-
-
-def create_message_text():
-    message_text_intro = 'Hey Ira, Dyson tut uje, yo'
-    return message_text_intro
 
 
 if __name__ == '__main__':
