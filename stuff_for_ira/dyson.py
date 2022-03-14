@@ -7,17 +7,12 @@ from utils import messages as msgs
 from utils import escape_shit as esc
 
 
-ira_messages = [
-    "NO Dyson 🙅‍♂️ 🙅‍♀️"
-]
-
-
 def check_and_report_dyson():
-    did_it, where_did_it_arrive = check_if_dyson_arrived()
+    did_it = check_dyson_nl()
     if did_it:
-        poke_ira_for_dyson(where_did_it_arrive)
+        poke_ira_for_dyson('https://www.dyson.nl/haarstyling/dyson-supersonic/overzicht')
     else:
-        no_dyson_message = random.choice(ira_messages)
+        no_dyson_message = "NO Dyson 🙅‍♂️ 🙅‍♀️"
         msgs.send_message(text=esc.escape_shit(no_dyson_message), chat_id=159278882)
 
 
@@ -50,17 +45,7 @@ def check_dyson_nl():
     return dyson_detected
 
 
-def check_if_dyson_arrived():
-    did_it_arrive = check_dyson_nl()
-    where_did_it_arrive = 'https://www.dyson.nl/haarstyling/dyson-supersonic/overzicht'
-    return did_it_arrive, where_did_it_arrive
-
-
 def poke_ira_for_dyson(where_is_it):
     message_text = 'Hey Ira, Dyson tut uje, yo' + '\n\n' + where_is_it
     msgs.send_message(text=esc.escape_shit(message_text), chat_id=159278882, disable_notification=False)
     print("@@ Poke Ira TikTok complete")
-
-
-if __name__ == '__main__':
-    check_and_report_dyson()
