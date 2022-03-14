@@ -5,6 +5,8 @@ from fc import fincodata as fcd
 from utils import messages as msgs
 from utils import update_handler as uh
 from utils import response as rsp
+from stuff_for_ira import tiktok as tt
+from stuff_for_ira import dyson
 
 from flask import Flask, request
 
@@ -43,15 +45,19 @@ def process_dyk_one(thing):
 
 @app.route('/poke/bettyford/tiktok')
 def poke_bettyford_tiktok():
-    msgs.send_message(text="👋 Hello ma'am\\! A message from sir\\.\nПора бы уже запостить пятничный Тикток\\!",
-                      chat_id=159278882)
-    print("@@ Poke Ira TikTok complete")
+    tt.poke_ira_for_tiktok()
     return "@@ Poke Ira TikTok complete"
 
 
-@app.route('/finco/query/yesterday')
-def post_yesterday_finco_stats():
-    text = fcd.get_fc_message('yesterday')
+@app.route('/check/bettyford/dyson')
+def check_for_dyson():
+    dyson.check_and_report_dyson()
+    return '@@ Dyson check complete'
+
+
+@app.route('/finco/query/<query_name>')
+def post_yesterday_finco_stats(query_name='yesterday'):
+    text = fcd.get_fc_message(query_name)
     chat_id = os.environ.get('FC_GROUP_CHAT_ID')
     msgs.send_message(text=text, chat_id=chat_id)
     print("@@ FinCo query - Yesterday complete")
