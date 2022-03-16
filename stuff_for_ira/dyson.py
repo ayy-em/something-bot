@@ -23,6 +23,7 @@ def check_dyson_nl():
     """
     :return: True if found, False if not
     """
+    print('@@ Attempting to check Dyson NL')
     headers = requests.utils.default_headers()
     ua_list = [
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:98.0) Gecko/20100101 Firefox/98.0',
@@ -37,14 +38,17 @@ def check_dyson_nl():
             'User-Agent': ua_for_request
         }
     )
-    page = requests.get('https://www.dyson.nl/haarstyling/dyson-supersonic/overzicht', headers=headers)
-    soup = BeautifulSoup(page.content, 'lxml')
     dyson_detected = False
-    for element in soup.find_all('div', class_='trade-up-item__stock-message'):
-        if element.text != 'Momenteel niet op voorraad':
-            dyson_detected = True
-        else:
-            pass
+    try:
+        page = requests.get('https://www.dyson.nl/haarstyling/dyson-supersonic/overzicht', headers=headers, timeout=15)
+        soup = BeautifulSoup(page.content, 'lxml')
+        for element in soup.find_all('div', class_='trade-up-item__stock-message'):
+            if element.text != 'Momenteel niet op voorraad':
+                dyson_detected = True
+            else:
+                pass
+    except Exception as exc:
+        msgs.send_test_message('I ran into the following exception:\n\n' + str(exc))
     return dyson_detected
 
 
