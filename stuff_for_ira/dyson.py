@@ -8,7 +8,10 @@ from utils import escape_shit as esc
 
 
 def check_and_report_dyson():
+    msgs.send_test_message('trying to check dyson')
+    print('trying my best YO')
     did_it = check_dyson_nl()
+    msgs.send_test_message('Checked Dyson and did_it equals ' + str(did_it))
     if did_it:
         poke_ira_for_dyson('https://www.dyson.nl/haarstyling/dyson-supersonic/overzicht')
     else:
@@ -46,6 +49,6 @@ def check_dyson_nl():
 
 
 def poke_ira_for_dyson(where_is_it):
-    message_text = 'Hey Ira, Dyson tut uje, yo' + '\n\n' + where_is_it
+    message_text = 'Hey Ira, Dyson tut uje, yo!!\n\n' + where_is_it
     msgs.send_message(text=esc.escape_shit(message_text), chat_id=159278882, disable_notification=False)
-    print("@@ Poke Ira TikTok complete")
+    print("@@ Poke Ira Dyson complete")

@@ -26,6 +26,8 @@ def get_tiktok_poke_message(weekday):
         message_text = random.choice(tuesday_messages)
     elif weekday == 4:
         message_text = random.choice(friday_messages)
+    else:
+        message_text = 'wtf, help! bug! help help bug'
     message_text = esc.escape_shit(message_text)
     return message_text
 

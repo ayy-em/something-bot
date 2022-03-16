@@ -1,32 +1,32 @@
 cron:
-- description: "Vice News - Basic - Daily Post"
-  url: /channel/vice/post/one
-  schedule: every day 13:00
-  timezone: Europe/Amsterdam
-- description: "Did You Know - Reddit - Daily Post"
-  url: /channel/didyouknow/post/one
-  schedule: every day 10:00
-  timezone: Europe/Amsterdam
-- description: "Did You Know - Wiki Fact - Daily Post"
-  url: /channel/didyouknow/post/two
-  schedule: every day 14:00
-  timezone: Europe/Amsterdam
-- description: "Did You Know - This Day - Daily Post"
-  url: /channel/didyouknow/post/three
-  schedule: every day 18:00
-  timezone: Europe/Amsterdam
-- description: "Poke Ira about TikTok - Friday"
-  url: /poke/bettyford/tiktok
-  schedule: every friday 16:00
-  timezone: Europe/Amsterdam
-- description: "Poke Ira about TikTok - Tuesday"
-  url: /poke/bettyford/tiktok
-  schedule: every tuesday 15:00
-  timezone: Europe/Amsterdam
-- description: "Check internet - Ira Dyson"
-  url: /check/bettyford/dyson
-  schedule: every 1 hours
-- description: "FinCo - Send me yesterday clicks"
-  url: /finco/query/yesterday
-  schedule: every day 10:30
-  timezone: Europe/Amsterdam
+  - description: "Vice News - Basic - Daily Post"
+    url: /channel/vice/post/one
+    schedule: every day 13:00
+    timezone: Europe/Amsterdam
+  - description: "Did You Know - Reddit - Daily Post"
+    url: /channel/didyouknow/post/one
+    schedule: every day 10:00
+    timezone: Europe/Amsterdam
+  - description: "Did You Know - Wiki Fact - Daily Post"
+    url: /channel/didyouknow/post/two
+    schedule: every day 14:00
+    timezone: Europe/Amsterdam
+  - description: "Did You Know - This Day - Daily Post"
+    url: /channel/didyouknow/post/three
+    schedule: every day 18:00
+    timezone: Europe/Amsterdam
+  - description: "Poke Ira about TikTok - Friday"
+    url: /poke/bettyford/tiktok
+    schedule: every friday 16:00
+    timezone: Europe/Amsterdam
+  - description: "Poke Ira about TikTok - Tuesday"
+    url: /poke/bettyford/tiktok
+    schedule: every tuesday 15:00
+    timezone: Europe/Amsterdam
+  - description: "Check internet - Ira Dyson"
+    url: /check/bettyford/dyson
+    schedule: every 1 hours
+  - description: "FinCo - Send me yesterday clicks"
+    url: /finco/query/yesterday
+    schedule: every day 10:30
+    timezone: Europe/Amsterdam

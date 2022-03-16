@@ -45,12 +45,14 @@ def process_dyk_one(thing):
 
 @app.route('/poke/bettyford/tiktok')
 def poke_bettyford_tiktok():
+    print('@@ Starting the Tiktok flow')
     tt.poke_ira_for_tiktok()
     return "@@ Poke Ira TikTok complete"
 
 
 @app.route('/check/bettyford/dyson')
 def check_for_dyson():
+    print('@@ Starting the Dyson flow')
     dys.check_and_report_dyson()
     return '@@ Dyson check complete'
 
