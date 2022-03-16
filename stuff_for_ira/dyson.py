@@ -8,7 +8,6 @@ from utils import escape_shit as esc
 
 
 def check_and_report_dyson():
-    msgs.send_test_message('trying to check dyson')
     print('trying my best YO')
     did_it = check_dyson_nl()
     msgs.send_test_message('Checked Dyson and did_it equals ' + str(did_it))
@@ -25,22 +24,14 @@ def check_dyson_nl():
     """
     print('@@ Attempting to check Dyson NL')
     headers = requests.utils.default_headers()
-    ua_list = [
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:98.0) Gecko/20100101 Firefox/98.0',
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:98.0) Gecko/20100101 Firefox/98.0',
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_6) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.2 Safari/605.1.15',
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.11; rv:78.0) Gecko/20100101 Firefox/78.0',
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/99.0.4844.51 Safari/537.36'
-    ]
-    ua_for_request = random.choice(ua_list)
     headers.update(
         {
-            'User-Agent': ua_for_request
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:98.0) Gecko/20100101 Firefox/98.0'
         }
     )
     dyson_detected = False
     try:
-        page = requests.get('https://www.dyson.nl/haarstyling/dyson-supersonic/overzicht', headers=headers, timeout=15)
+        page = requests.get('https://www.dyson.nl/haarstyling/dyson-supersonic/overzicht', headers=headers, timeout=180)
         soup = BeautifulSoup(page.content, 'lxml')
         for element in soup.find_all('div', class_='trade-up-item__stock-message'):
             if element.text != 'Momenteel niet op voorraad':
