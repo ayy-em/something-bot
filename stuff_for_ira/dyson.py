@@ -29,6 +29,8 @@ def check_dyson_nl():
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:98.0) Gecko/20100101 Firefox/98.0'
         }
     )
+    # ToDo:
+    # ToDo: https://www.scrapingbee.com/blog/python-requests-proxy/
     dyson_detected = False
     try:
         page = requests.get('https://www.dyson.nl/haarstyling/dyson-supersonic/overzicht', headers=headers, timeout=180)

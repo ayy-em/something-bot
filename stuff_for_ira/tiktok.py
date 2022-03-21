@@ -35,5 +35,6 @@ def get_tiktok_poke_message(weekday):
 def poke_ira_for_tiktok():
     weekday_today = datetime.datetime.today().weekday()
     message_text = get_tiktok_poke_message(weekday_today)
+    # ToDo: replace Ira's id with an env var
     msgs.send_message(text=message_text, chat_id=159278882)
     print("@@ Poke Ira TikTok complete")

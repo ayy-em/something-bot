@@ -1,5 +1,6 @@
 import os
 import random
+import datetime
 
 import requests
 
@@ -21,7 +22,11 @@ def get_fc_message(query_name):
     else:
         message_text = 'You done fucked it up m8'
     """
-    print(message_text)
+    if datetime.datetime.today().weekday() == 2:
+        finco_chat_id = os.environ.get('FC_GROUP_CHAT_ID')
+        possible_doers = ['@ayy_em', '@aaronhzl']
+        text_social = "Every Wednesday, we pick a random person to add a news article and post it on social.\nThis week the lucky guy is ...{}!".format(str(random.choice(possible_doers)))
+        msg.send_message(chat_id=finco_chat_id, text=esc.escape_shit(text_social))
     return message_text
 
 
