@@ -50,13 +50,6 @@ def poke_bettyford_tiktok():
     return "@@ Poke Ira TikTok complete"
 
 
-@app.route('/check/bettyford/dyson')
-def check_for_dyson():
-    print('@@ Starting the Dyson flow')
-    dys.check_and_report_dyson()
-    return '@@ Dyson check complete'
-
-
 @app.route('/finco/query/<query_name>')
 def post_yesterday_finco_stats(query_name='yesterday'):
     text = fcd.get_fc_message(query_name)
@@ -64,6 +57,16 @@ def post_yesterday_finco_stats(query_name='yesterday'):
     msgs.send_message(text=text, chat_id=chat_id)
     print("@@ FinCo query - Yesterday complete")
     return "@@ FinCo query - Yesterday complete"
+
+
+"""
+Deprecated endpoints
+@app.route('/check/bettyford/dyson')
+def check_for_dyson():
+    print('@@ Starting the Dyson flow')
+    dys.check_and_report_dyson()
+    return '@@ Dyson check complete'
+"""
 
 
 if __name__ == '__main__':

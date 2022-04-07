@@ -15,12 +15,9 @@ def get_vice():
 def get_caption_text():
     if wkday == 1:
         # Tuesday
-        themenum = daynum % 7
-        themelist = ['tech', 'shopping', 'drugs', 'health', 'music', 'entertainment', 'food']
+        themenum = daynum % 8
+        themelist = ['tech', 'shopping', 'drugs', 'health', 'music', 'entertainment', 'food', 'world']
         v_theme = themelist[themenum]
-    elif wkday == 3:
-        # Thursday
-        v_theme = 'world'
     else:
         # Saturday
         v_theme = 'news'
