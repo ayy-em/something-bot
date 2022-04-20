@@ -8,6 +8,9 @@ from utils import escape_shit as esc
 from utils import messages as msg
 
 
+finco_chat_id = os.environ.get('FC_GROUP_CHAT_ID')
+
+
 def get_fc_message(query_name):
     message_text = get_yesterday_text(query_period='yesterday')
     """
@@ -23,10 +26,12 @@ def get_fc_message(query_name):
         message_text = 'You done fucked it up m8'
     """
     if datetime.datetime.today().weekday() == 2:
-        finco_chat_id = os.environ.get('FC_GROUP_CHAT_ID')
         possible_doers = ['@ayy_em', '@aaronhzl']
         text_social = "Every Wednesday, we pick a random person to add a news article and post it on social.\nThis week the lucky guy is ...{}!".format(str(random.choice(possible_doers)))
         msg.send_message(chat_id=finco_chat_id, text=esc.escape_shit(text_social))
+    elif datetime.datetime.today().weekday() == 3:
+        text_billing = "Hey yo @ayy_yo check gcloud billing pls - [link](https://console.cloud.google.com/billing/01F463-60D020-C5CD47/reports;chartType=STACKED_BAR;grouping=GROUP_BY_SKU?project=bank-comparison-website)."
+        msg.send_message(chat_id=finco_chat_id, text=esc.escape_shit(text_billing))
     return message_text
 
 
