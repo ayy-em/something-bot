@@ -30,8 +30,8 @@ def get_fc_message(query_name):
         text_social = "Every Wednesday, we pick a random person to add a news article and post it on social.\nThis week the lucky guy is ...{}!".format(str(random.choice(possible_doers)))
         msg.send_message(chat_id=finco_chat_id, text=esc.escape_shit(text_social))
     elif datetime.datetime.today().weekday() == 3:
-        text_billing = "Hey yo @ayy_yo check gcloud billing pls - [link](https://console.cloud.google.com/billing/01F463-60D020-C5CD47/reports;chartType=STACKED_BAR;grouping=GROUP_BY_SKU?project=bank-comparison-website)."
-        msg.send_message(chat_id=finco_chat_id, text=esc.escape_shit(text_billing))
+        text_billing = "Hey yo @ayy_yo check out the [GCloud billing](https://console.cloud.google.com/billing/01F463-60D020-C5CD47/reports;chartType=STACKED_BAR;grouping=GROUP_BY_SKU?project=bank-comparison-website)."
+        msg.send_message(chat_id=finco_chat_id, text=text_billing)
     return message_text
 
 
@@ -42,13 +42,14 @@ def get_yesterday_text(query_period):
         "Heya 👋 FC stats here. ",
         "Morning bitches 😎 Eat stats! ",
         "Are you ready to get these sweet 10 Euros a month?! 🤑 ",
-        "Let's get down to business 💼 \nI don't got no time to play around, what is this?\n",
+        "Let's get down to business 💼 ",
         "Did you post something on social today? 👀 ",
-        "ayy lmao 👽 fresh stats arrived ",
+        "ayy lmao 👽 Fresh stats arrived! ",
         "Ciao miei cari amici! 🤌 🤌 🤌 ",
-        "Hello there boyz ✌️ "
+        "Hello there boyz! ✌ ",
+        "Welcome to fresh stats!"
     ]
-    text_one = random.choice(greetings_list)
+    text_one = random.choice(greetings_list) + "\n"
     text_one = text_one + data_json['period']
     data_json.pop('period')
     clicks_total = len(data_json)
@@ -59,7 +60,7 @@ def get_yesterday_text(query_period):
                         data_json[click]['uc']
             text_two = text_two + text_line + '\n'
     elif clicks_total >= 8:
-        text_two = "\n\nRedirects to partners: {}. Too many to list here.\n".format(str(clicks_total))
+        text_two = "\n\nRedirects to partners: {}.\n".format(str(clicks_total))
     else:
         text_two = '\nZero redirects to partners. Feels bad, man. 😔\n'
 
