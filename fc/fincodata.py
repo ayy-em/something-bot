@@ -13,25 +13,17 @@ finco_chat_id = os.environ.get('FC_GROUP_CHAT_ID')
 
 def get_fc_message(query_name):
     message_text = get_yesterday_text(query_period='yesterday')
-    """
-    if query_name == 'today':
-        message_text = get_today_text()
-    elif query_name == 'yesterday':
-        message_text = get_yesterday_text()
-    elif query_name == 'last-week':
-        message_text = get_last_week_text()
-    elif query_name == 'last-month':
-        message_text = get_last_month_text()
-    else:
-        message_text = 'You done fucked it up m8'
-    """
-    if datetime.datetime.today().weekday() == 2:
-        possible_doers = ['@ayy_em', '@aaronhzl']
-        text_social = "Every Wednesday, we pick a random person to add a news article and post it on social.\nThis week the lucky guy is ...{}!".format(str(random.choice(possible_doers)))
+    weekday = datetime.datetime.today().weekday()
+    possible_doers = ['@ayy_em', '@aaronhzl']
+    if weekday == 1:
+        text_billing = "Hey yo @ayy_yo check if this month's billing is not crazy here: https://console.cloud.google.com/billing/01F463-60D020-C5CD47/reports;chartType=STACKED_BAR;grouping=GROUP_BY_SKU?project=bank-comparison-website."
+        msg.send_message(chat_id=finco_chat_id, text=esc.escape_shit(text_billing))
+    elif weekday == 2:
+        text_social = "Picking a random person to add a news article and post it on social.\nThis week the lucky guy is ...{}!".format(str(random.choice(possible_doers)))
         msg.send_message(chat_id=finco_chat_id, text=esc.escape_shit(text_social))
-    elif datetime.datetime.today().weekday() == 3:
-        text_billing = "Hey yo @ayy_yo check out the [GCloud billing](https://console.cloud.google.com/billing/01F463-60D020-C5CD47/reports;chartType=STACKED_BAR;grouping=GROUP_BY_SKU?project=bank-comparison-website)."
-        msg.send_message(chat_id=finco_chat_id, text=text_billing)
+    elif weekday == 3:
+        text_haro = 'Random pick to check out fresh HARO mails, find us one thing to comment on and reach out to the reporter. Today is the day for... {}!'.format(str(random.choice(possible_doers)))
+        msg.send_message(chat_id=finco_chat_id, text=esc.escape_shit(text_haro))
     return message_text
 
 
@@ -39,8 +31,8 @@ def get_yesterday_text(query_period):
     data_json = get_fc_data(query_period)
     greetings_list = [
         "Good morning! 🌞 Here are the stats. ",
-        "Heya 👋 FC stats here. ",
-        "Morning bitches 😎 Eat stats! ",
+        "Heya 👋 FinCo stats here. ",
+        "Morning my dudes 😎 enjoy your mind-blowing stats",
         "Are you ready to get these sweet 10 Euros a month?! 🤑 ",
         "Let's get down to business 💼 ",
         "Did you post something on social today? 👀 ",
