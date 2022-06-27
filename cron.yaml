@@ -27,3 +27,7 @@ cron:
     url: /finco/query/yesterday
     schedule: every day 10:30
     timezone: Europe/Amsterdam
+  - description: "Remind Nastya About dinner - Daily"
+    url: /poke/nastya/dinner
+    schedule: every day 15:15
+    timezone: Europe/Amsterdam

@@ -6,6 +6,7 @@ from utils import messages as msgs
 from utils import update_handler as uh
 from utils import response as rsp
 from stuff_for_ira import tiktok as tt
+from reminders import nastya_dinner
 from stuff_for_ira import dyson as dys
 
 from flask import Flask, request
@@ -57,6 +58,13 @@ def post_yesterday_finco_stats(query_name='yesterday'):
     msgs.send_message(text=text, chat_id=chat_id)
     print("@@ FinCo query - Yesterday complete")
     return "@@ FinCo query - Yesterday complete"
+
+
+@app.route('/poke/nastya/dinner')
+def remind_nastya_about_dinner():
+    print('@@ Starting the Nastya Dinner flow')
+    nastya_dinner.remind_nastya_about_dinner()
+    return "@@ Remind Nastya Dinner complete"
 
 
 """
