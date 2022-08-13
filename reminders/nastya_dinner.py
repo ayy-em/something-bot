@@ -18,11 +18,14 @@ def get_nastya_dinner_message(weekday):
             'Да-да, как обычно, время записаться на ужин'
         ]
         message_text = esc.escape_shit(random.choice(message_options))
+    else:
+        message_text = False
     return message_text
 
 
 def remind_nastya_about_dinner():
     weekday_today = datetime.datetime.today().weekday()
     message_text = get_nastya_dinner_message(weekday_today)
-    msgs.send_message(text=message_text, chat_id=1163375334, disable_notification=False)
+    if message_text:
+        msgs.send_message(text=message_text, chat_id=364503815, disable_notification=False)
     print("@@ Poke Nastya dinner complete")
