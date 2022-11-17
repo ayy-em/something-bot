@@ -71,7 +71,7 @@ def get_yesterday_text(query_period):
 
     text = text_one + text_two
     try:
-        text = text + '\n🤖 ' + get_and_format_ga_data()
+        text = text + '\n' + get_and_format_ga_data()
     except Exception as e:
         msg.send_message(text=esc.escape_shit('Oh and btw, fetching GA data failed and this is why:'), chat_id=os.environ.get('FC_GROUP_CHAT_ID'))
         msg.send_message(text=esc.escape_shit(str(e)), chat_id=os.environ.get('FC_GROUP_CHAT_ID'))
@@ -85,6 +85,7 @@ def get_fc_data(query_period):
     return data_json
 
 
+# ToDo: sort out datetime crap
 def get_and_format_ga_data():
     from fc import google_analytics_query as gaq
     ga_list = gaq.get_ga_stats_for_last_week()
@@ -93,7 +94,32 @@ def get_and_format_ga_data():
     for item in ga_list:
         gae_total_counter = gae_total_counter + int(item[2])
         if item[0] == 'google':
-            gae_google_counter = gae_google_counter + 1
-    ga_text = '⚠️ Updated not-bullshit GA4 report!  ⚠️\nLast Week: {} new users. {} from Google Search.'.format(str(gae_total_counter), str(gae_google_counter))
-    # ToDo: sort out datetime crap
+            gae_google_counter = gae_google_counter + int(item[2])
+    g_share = 100 * gae_google_counter / gae_total_counter
+    g_share_str = str(round(g_share, 1)) + '%'
+    ga_text = '⚠️ Last 7 Days - GA4 - Now accurate!  ⚠️\n📈 New website visitors: {}. \n🔍 {} ({}) from Google Search.\n\n'.format(str(gae_total_counter), str(gae_google_counter), g_share_str)
+    # Top 3 pages
+    try:
+        for item in ga_list:
+            item.pop(0)
+        p_one = ga_list[0][0]
+        p_two = ga_list[1][0]
+        p_three = ga_list[2][0]
+        p_one_counter = p_two_counter = p_three_counter = 0
+        for item in ga_list:
+            if item[0] == p_one:
+                p_one_counter += int(item[1])
+            if item[0] == p_two:
+                p_two_counter += int(item[1])
+            if item[0] == p_three:
+                p_three_counter += int(item[1])
+        bby = [(p_one, p_one_counter), (p_two, p_two_counter), (p_three, p_three_counter)]
+        string_to_add = 'Top 3 Pages by New Users 🔝'
+        s_one = '1️ {} - {} users'.format(str(bby[0][0]), str(bby[0][1]))
+        s_two = '2️ {} - {} users'.format(str(bby[1][0]), str(bby[1][1]))
+        s_three = '3️ {} - {} users'.format(str(bby[2][0]), str(bby[2][1]))
+        superstring = string_to_add + '\n' + s_one + '\n' + s_two + '\n' + s_three
+        ga_text = ga_text + superstring
+    except:
+        ga_text = ga_text + 'But getting top-3 pages failed 🤦‍♂️'
     return ga_text
