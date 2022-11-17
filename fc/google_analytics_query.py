@@ -8,7 +8,7 @@ import os
 GOOGLE_APPLICATION_CREDENTIALS = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
 
 
-def get_ga_stats_for_yesterday():
+def get_ga_stats_for_last_week():
     """Runs a simple report on a Google Analytics 4 property."""
     # client to use the credentials specified in GOOGLE_APPLICATION_CREDENTIALS environment variable
     client = BetaAnalyticsDataClient()
@@ -17,8 +17,8 @@ def get_ga_stats_for_yesterday():
     request = RunReportRequest(
         property=f"properties/{property_id}",
         dimensions=[Dimension(name="firstUserSource"), Dimension(name="fullPageUrl")],
-        metrics=[Metric(name="activeUsers")],
-        date_ranges=[DateRange(start_date="yesterday", end_date="yesterday")],
+        metrics=[Metric(name="newUsers")],
+        date_ranges=[DateRange(start_date="8daysAgo", end_date="yesterday")],
     )
     response = client.run_report(request)
     list_to_return = []

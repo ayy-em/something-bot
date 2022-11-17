@@ -15,15 +15,25 @@ def get_fc_message(query_name):
     message_text = get_yesterday_text(query_period='yesterday')
     weekday = datetime.datetime.today().weekday()
     possible_doers = ['@ayy_em', '@aaronhzl']
-    if weekday == 1:
-        text_billing = "Hey yo @ayy_yo check if this month's billing is not crazy here: https://console.cloud.google.com/billing/01F463-60D020-C5CD47/reports;chartType=STACKED_BAR;grouping=GROUP_BY_SKU?project=bank-comparison-website."
-        msg.send_message(chat_id=finco_chat_id, text=esc.escape_shit(text_billing))
+    if weekday == 1 or weekday == 4:
+        activity_num = random.randint(1, 5)
+        if activity_num == 1:
+            string_random_activity = 'Post one backlink somewhere - wikipedia, Revolut forums, you name it!'
+            # ToDo: parse sitemap to get bank names
+        elif activity_num == 2:
+            string_random_activity = 'Send like two emails for potential backlink prospects.'
+        elif activity_num == 3:
+            string_random_activity = 'Pick an invest platform/app at random, check if the stats in the model are up-to-date and improve the review somehow!'
+        elif activity_num == 4:
+            string_random_activity = 'Pick a random bank, and check if the terms/fees/products in the model are up-to-date.'
+        else:
+            string_random_activity = 'Respond to one HARO request.'
+        string_random_text = "It's random activity for random person day!\nActivity: " + string_random_activity + '\nAnd the random person to do that today is... {}!'.format(str(random.choice(possible_doers)))
+        msg.send_message(chat_id=finco_chat_id, text=esc.escape_shit(string_random_text))
     elif weekday == 2:
-        text_social = "Picking a random person to add a news article and post it on social.\nThis week the lucky guy is ...{}!".format(str(random.choice(possible_doers)))
+        text_social = "Okay, one (1️) social post, just announcing a recent article or review, to be scheduled Friday 10:30, alright??\nOkay, let's throw the dice! 🎲\nAlright! This week's post is by the star SMM guy...\nAnd his name is ... {}!".format(str(random.choice(possible_doers)))
         msg.send_message(chat_id=finco_chat_id, text=esc.escape_shit(text_social))
-    elif weekday == 3:
-        text_haro = 'Random pick to check out fresh HARO mails, find us one thing to comment on and reach out to the reporter. Today is the day for... {}!'.format(str(random.choice(possible_doers)))
-        msg.send_message(chat_id=finco_chat_id, text=esc.escape_shit(text_haro))
+
     return message_text
 
 
@@ -31,15 +41,18 @@ def get_yesterday_text(query_period):
     data_json = get_fc_data(query_period)
     greetings_list = [
         "Good morning! 🌞 Here are the stats. ",
-        "Heya 👋 FinCo stats here. ",
+        "Hey-hey people 👋 FinCo stats here. ",
         "Morning my dudes 😎 enjoy your mind-blowing stats",
         "Are you ready to get these sweet 10 Euros a month?! 🤑 ",
-        "Let's get down to business 💼 ",
+        "Alright, let's get down to business 💼 ",
+        "Another day, another dollar Ali pays you via Everflow.",
         "Did you post something on social today? 👀 ",
-        "ayy lmao 👽 Fresh stats arrived! ",
-        "Ciao miei cari amici! 🤌 🤌 🤌 ",
-        "Hello there boyz! ✌ ",
-        "Welcome to fresh stats!"
+        "ayy lmao 👽 Juicy new batch of totally wrong stats arrived! ",
+        "Rise and shine, comrades! There's labor to be done today.",
+        "Salutations, gentlemen!",
+        "Ok, new day, is it the one where you spend literally five minutes doing reachout for backlinks?!",
+        "G'Morning. FYI: Your competitors are writing new exciting niche high-traffic SEO-polished content RIGHT NOW.",
+        "Start your day with super-inaccurate stats!"
     ]
     text_one = random.choice(greetings_list) + "\n"
     text_one = text_one + data_json['period']
@@ -52,7 +65,7 @@ def get_yesterday_text(query_period):
                         data_json[click]['uc']
             text_two = text_two + text_line + '\n'
     elif clicks_total >= 8:
-        text_two = "\n\nRedirects to partners: {}.\n".format(str(clicks_total))
+        text_two = "\n\nBackend redirects yesterday: {}. Totally reliable data, automagically.\n".format(str(clicks_total))
     else:
         text_two = '\nZero redirects to partners. Feels bad, man. 😔\n'
 
@@ -66,7 +79,7 @@ def get_yesterday_text(query_period):
 
 
 def get_fc_data(query_period):
-    url_to_poke = 'https://fintechcompass.net/query/clicks/{}/'.format(query_period)
+    url_to_poke = 'https://fintechcompass.net/api/query/clicks/{}/'.format(query_period)
     r = requests.get(url_to_poke)
     data_json = r.json()
     return data_json
@@ -74,12 +87,13 @@ def get_fc_data(query_period):
 
 def get_and_format_ga_data():
     from fc import google_analytics_query as gaq
-    ga_list = gaq.get_ga_stats_for_yesterday()
+    ga_list = gaq.get_ga_stats_for_last_week()
     gae_total_counter = 0
     gae_google_counter = 0
     for item in ga_list:
         gae_total_counter = gae_total_counter + int(item[2])
         if item[0] == 'google':
             gae_google_counter = gae_google_counter + 1
-    ga_text = 'GA4: {} visitors, of which {} from Google search.'.format(str(gae_total_counter), str(gae_google_counter))
+    ga_text = '⚠️ Updated not-bullshit GA4 report!  ⚠️\nLast Week: {} new users. {} from Google Search.'.format(str(gae_total_counter), str(gae_google_counter))
+    # ToDo: sort out datetime crap
     return ga_text
