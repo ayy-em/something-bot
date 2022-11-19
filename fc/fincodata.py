@@ -43,7 +43,7 @@ def get_yesterday_text(query_period):
         "Good morning! 🌞 Here are the stats. ",
         "Hey-hey people 👋 FinCo stats here. ",
         "Morning my dudes 😎 enjoy your mind-blowing stats",
-        "Are you ready to get these sweet 10 Euros a month?! 🤑 ",
+        "Are you ready to get these sweet **100** Euros a month?! 🤑 ",
         "Alright, let's get down to business 💼 ",
         "Another day, another dollar Ali pays you via Everflow.",
         "Did you post something on social today? 👀 ",
@@ -65,7 +65,7 @@ def get_yesterday_text(query_period):
                         data_json[click]['uc']
             text_two = text_two + text_line + '\n'
     elif clicks_total >= 8:
-        text_two = "\n\nBackend redirects yesterday: {}. Totally reliable data, automagically.\n".format(str(clicks_total))
+        text_two = "\nBE redirects yesterday: {}.\n".format(str(clicks_total))
     else:
         text_two = '\nZero redirects to partners. Feels bad, man. 😔\n'
 
@@ -97,7 +97,7 @@ def get_and_format_ga_data():
             gae_google_counter = gae_google_counter + int(item[2])
     g_share = 100 * gae_google_counter / gae_total_counter
     g_share_str = str(round(g_share, 1)) + '%'
-    ga_text = '⚠️ Last 7 Days - GA4 - Now accurate!  ⚠️\n📈 New website visitors: {}. \n🔍 {} ({}) from Google Search.\n\n'.format(str(gae_total_counter), str(gae_google_counter), g_share_str)
+    ga_text = '**Last 7 Days - GA4**\n\n📈 New website visitors: {}. \n🔍 {} ({}) from Google Search.\n\n'.format(str(gae_total_counter), str(gae_google_counter), g_share_str)
     # Top 3 pages
     try:
         for item in ga_list:
@@ -114,10 +114,10 @@ def get_and_format_ga_data():
             if item[0] == p_three:
                 p_three_counter += int(item[1])
         bby = [(p_one, p_one_counter), (p_two, p_two_counter), (p_three, p_three_counter)]
-        string_to_add = 'Top 3 Pages by New Users 🔝'
-        s_one = '1️ {} - {} users'.format(str(bby[0][0]), str(bby[0][1]))
-        s_two = '2️ {} - {} users'.format(str(bby[1][0]), str(bby[1][1]))
-        s_three = '3️ {} - {} users'.format(str(bby[2][0]), str(bby[2][1]))
+        string_to_add = '**Top Pages by New Users** 🔝\n'
+        s_one = '#1: {} - {}'.format(str(bby[0][0]), str(bby[0][1]))
+        s_two = '#2: {} - {}'.format(str(bby[1][0]), str(bby[1][1]))
+        s_three = '#3: {} - {}'.format(str(bby[2][0]), str(bby[2][1]))
         superstring = string_to_add + '\n' + s_one + '\n' + s_two + '\n' + s_three
         ga_text = ga_text + superstring
     except:
