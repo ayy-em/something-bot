@@ -25,12 +25,16 @@ def respond_to_channel(update):
 def respond_to_group(update):
     text_received = update.text_message_text
     print('AYY_LMAO Received Groupchat message: ' + update.text_message_text)
-    print('AYY_LMAO Received Groupchat update: ' + str(update))
     if text_received[:19] == '@SomethingReallyBot':
-        response_text = ai_response.get_ai_response(str(update.text_message_text))
-        msgs.send_message(text=esc.escape_shit(response_text), chat_id=update.message_chat_from, parse_mode='MarkdownV2', disable_notification=True)
+        response_from_ai = ai_response.get_ai_response(text_received)
+        response_string = response_from_ai[0]
+        response_type = response_from_ai[1]
+        if response_type == 'image_url':
+            msgs.send_photo(caption=None, photo=response_string, chat_id=update.message_chat_from)
+        else:
+            msgs.send_message(text=esc.escape_shit(response_string), chat_id=update.message_chat_from, parse_mode='MarkdownV2', disable_notification=True)
     else:
-        msgs.send_test_message(txt=esc.escape_shit('Got this Groupchat msg: ' + update.test_message_text))
+        msgs.send_test_message(txt=esc.escape_shit('Got this Groupchat msg: ' + update.text_message_text))
 
 
 def respond_to_direct_message(update):
