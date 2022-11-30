@@ -4,6 +4,7 @@ from . import escape_shit as esc
 from . import messages as msgs
 from . import update_handler as uh
 from utils import ai_response
+import os
 
 
 def respond_to(update):
@@ -34,7 +35,8 @@ def respond_to_group(update):
         else:
             msgs.send_message(text=esc.escape_shit(response_string), chat_id=update.message_chat_from, parse_mode='MarkdownV2', disable_notification=True)
     else:
-        msgs.send_test_message(txt=esc.escape_shit('Got this Groupchat msg: ' + update.text_message_text))
+        if update.message_chat_from != os.getenv('FC_GROUP_CHAT_ID') and update.message_chat['title'] != 'Vibing':
+            msgs.send_test_message(txt=esc.escape_shit('Got this Groupchat msg: ' + update.text_message_text))
 
 
 def respond_to_direct_message(update):
