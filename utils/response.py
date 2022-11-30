@@ -45,10 +45,18 @@ def respond_to_direct_message(update):
         reply_msg = cmds.process_command(message_text_received)
     else:
         reply_msg = cnv.process_text(message_text_received)
-    msgs.send_message(text=esc.escape_shit(reply_msg), chat_id=update.message_chat_from)
+        if type(reply_msg) == str:
+            msgs.send_message(text=esc.escape_shit(reply_msg), chat_id=update.message_chat_from)
+        else:
+            response_string = reply_msg[0]
+            response_type = reply_msg[1]
+            if response_type == 'image_url':
+                msgs.send_photo(caption=None, photo=response_string, chat_id=update.message_chat_from)
+            else:
+                msgs.send_message(text=esc.escape_shit(response_string), chat_id=update.message_chat_from,
+                                  parse_mode='MarkdownV2', disable_notification=True)
     try:
-        test_message_text = 'I saw a {} message\nIt came from here: {}\nAnd it looks like this:\n\n{}'.format(
-            update.message_destination, update.message_chat, reply_msg)
+        test_message_text = 'I saw a {} message\nIt came from here: {}\nAnd it looks like this:\n\n{}'.format(update.message_destination, update.message_chat, reply_msg)
     except:
         try:
             test_message_text = 'Exception caught!\nI saw a {} message\nIt came from here: {}\nAnd it looks like this:\n\n{}'.format(

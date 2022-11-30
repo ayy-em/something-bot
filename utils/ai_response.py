@@ -3,7 +3,10 @@ import openai
 
 
 def get_ai_response(prompt):
-    prompt = prompt[20:95] if len(prompt[20:]) > 75 else prompt[20:]
+    if prompt[:19] == '@SomethingReallyBot':
+        prompt = prompt[20:95] if len(prompt[20:]) > 75 else prompt[20:]
+    else:
+        prompt = prompt[:75] if len(prompt) > 75 else prompt
     if prompt[:5] == 'image':
         if prompt[:10] == 'image of a':
             prompt = prompt[11:]
