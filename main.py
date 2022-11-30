@@ -67,15 +67,5 @@ def remind_nastya_about_dinner():
     return "@@ Remind Nastya Dinner complete"
 
 
-"""
-Deprecated endpoints
-@app.route('/check/bettyford/dyson')
-def check_for_dyson():
-    print('@@ Starting the Dyson flow')
-    dys.check_and_report_dyson()
-    return '@@ Dyson check complete'
-"""
-
-
 if __name__ == '__main__':
     app.run(host='127.0.0.1', port=8080, debug=True)

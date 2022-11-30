@@ -3,6 +3,7 @@ from . import conversation as cnv
 from . import escape_shit as esc
 from . import messages as msgs
 from . import update_handler as uh
+from utils import ai_response
 
 
 def respond_to(update):
@@ -22,9 +23,14 @@ def respond_to_channel(update):
 
 
 def respond_to_group(update):
-    test_message_text = 'I got sent this in a group: ' + update.text_message_text
-    print(test_message_text)
-    # msgs.send_test_message(txt=esc.escape_shit(test_message_text))
+    text_received = update.text_message_text
+    print('AYY_LMAO Received Groupchat message: ' + update.text_message_text)
+    print('AYY_LMAO Received Groupchat update: ' + str(update))
+    if text_received[:19] == '@SomethingReallyBot':
+        response_text = ai_response.get_ai_response(str(update.text_message_text))
+        msgs.send_message(text=esc.escape_shit(response_text), chat_id=update.message_chat_from, parse_mode='MarkdownV2', disable_notification=True)
+    else:
+        msgs.send_test_message(txt=esc.escape_shit('Got this Groupchat msg: ' + update.test_message_text))
 
 
 def respond_to_direct_message(update):
