@@ -25,5 +25,4 @@ def get_ga_stats_for_last_week():
     for row in response.rows:
         page_visited = row.dimension_values[1].value[18:]
         list_to_return.append([row.dimension_values[0].value, page_visited, row.metric_values[0].value])
-    print(list_to_return)
     return list_to_return

@@ -19,10 +19,6 @@ cron:
     url: /poke/bettyford/tiktok
     schedule: every friday 16:00
     timezone: Europe/Amsterdam
-  - description: "Poke Ira about TikTok - Tuesday"
-    url: /poke/bettyford/tiktok
-    schedule: every tuesday 15:00
-    timezone: Europe/Amsterdam
   - description: "FinCo - Send me yesterday clicks"
     url: /finco/query/yesterday
     schedule: every day 10:30
