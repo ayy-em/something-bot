@@ -2,6 +2,9 @@ import os
 import openai
 
 
+openai.api_key = os.getenv('OPEN_AI_API_KEY')
+
+
 def get_ai_response(prompt):
     if prompt[:19] == '@SomethingReallyBot':
         prompt = prompt[20:95] if len(prompt[20:]) > 75 else prompt[20:]
@@ -21,7 +24,6 @@ def get_ai_response(prompt):
         )
         return response['data'][0]['url'], 'image_url'
     else:
-        openai.api_key = os.getenv('OPEN_AI_API_KEY')
         response = openai.Completion.create(
             model="text-davinci-003",
             prompt=prompt,
@@ -29,4 +31,3 @@ def get_ai_response(prompt):
             max_tokens=100
         )
         return response['choices'][0]['text'], 'text'
-
