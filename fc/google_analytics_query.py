@@ -16,13 +16,16 @@ def get_ga_stats_for_last_week():
 
     request = RunReportRequest(
         property=f"properties/{property_id}",
-        dimensions=[Dimension(name="firstUserSource"), Dimension(name="fullPageUrl")],
+        dimensions=[Dimension(name="firstUserSource"), Dimension(name="pagePath")],
         metrics=[Metric(name="newUsers")],
-        date_ranges=[DateRange(start_date="8daysAgo", end_date="yesterday")],
+        date_ranges=[DateRange(start_date="7daysAgo", end_date="yesterday")],
     )
     response = client.run_report(request)
     list_to_return = []
     for row in response.rows:
-        page_visited = row.dimension_values[1].value[18:]
+        page_visited = row.dimension_values[1].value
         list_to_return.append([row.dimension_values[0].value, page_visited, row.metric_values[0].value])
     return list_to_return
+
+if __name__ == '__main__':
+    babyvar = get_ga_stats_for_last_week()

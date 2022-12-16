@@ -21,7 +21,6 @@ def send_message(text, chat_id=test_channel_id, parse_mode='MarkdownV2', disable
     }
     request_url = base_url + "sendMessage"
     r = requests.post(request_url, data=data_json)
-    print("@@ Message Request Sent - Response: " + str(r.text))
 
 
 def send_photo(caption, photo, chat_id=test_channel_id, parse_mode='MarkdownV2', disable_notification=True):
@@ -34,10 +33,8 @@ def send_photo(caption, photo, chat_id=test_channel_id, parse_mode='MarkdownV2',
     }
     request_url = base_url + "sendPhoto"
     r = requests.post(request_url, data=data_json)
-    print("@@ Message Request Sent - Response: " + str(r.text))
 
 
 def send_test_message(txt='WhateverTestyTest'):
     test_req_url = base_url + "sendMessage?chat_id={}&text={}&disable_notification=True".format(test_channel_id, txt)
     r = requests.get(test_req_url)
-    print("@@ Test Message Request Sent - Response: {}".format(r.text))

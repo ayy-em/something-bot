@@ -25,7 +25,6 @@ def respond_to_channel(update):
 
 def respond_to_group(update):
     text_received = update.text_message_text
-    print('AYY_LMAO Received Groupchat message: ' + update.text_message_text)
     if text_received[:19] == '@SomethingReallyBot':
         response_from_ai = ai_response.get_ai_response(text_received)
         response_string = response_from_ai[0]
@@ -35,7 +34,7 @@ def respond_to_group(update):
         else:
             msgs.send_message(text=esc.escape_shit(response_string), chat_id=update.message_chat_from, parse_mode='MarkdownV2', disable_notification=True)
     else:
-        if update.message_chat_from != os.getenv('FC_GROUP_CHAT_ID') and update.message_chat['title'] != 'Vibing':
+        if not util_check_if_im_present_in_chat(update):
             msgs.send_test_message(txt=esc.escape_shit('Got this Groupchat msg: ' + update.text_message_text))
 
 
@@ -64,3 +63,12 @@ def respond_to_direct_message(update):
         except:
             test_message_text = 'Double exception!\nBut I just saw this message:\n\n' + reply_msg
     msgs.send_test_message(txt=esc.escape_shit(test_message_text))
+
+
+def util_check_if_im_present_in_chat(update):
+    if update.message_chat_from != os.getenv('FC_GROUP_CHAT_ID'):
+        if update.message_chat['title'] != 'Vibing':
+            if update.message_chat_from != os.getenv('PSDLK_TG_CHAT_ID'):
+                if update.message_chat_from != os.getenv('FC_GROUP_CHAT_ID'):
+                    return True
+    return False

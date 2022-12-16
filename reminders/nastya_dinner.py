@@ -1,5 +1,6 @@
 import datetime
 import random
+import os
 
 from utils import messages as msgs
 from utils import escape_shit as esc
@@ -27,5 +28,4 @@ def remind_nastya_about_dinner():
     weekday_today = datetime.datetime.today().weekday()
     message_text = get_nastya_dinner_message(weekday_today)
     if message_text:
-        msgs.send_message(text=message_text, chat_id=364503815, disable_notification=False)
-    print("@@ Poke Nastya dinner complete")
+        msgs.send_message(text=message_text, chat_id=os.getenv('STASIA_MALTSEVA_CHAT_ID'), disable_notification=False)
