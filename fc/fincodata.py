@@ -69,7 +69,8 @@ def get_fc_data(query_period):
     return data_json
 
 
-# ToDo: sort out datetime crap
+# ToDo: sort out datetime crap with GA
+# ToDo: rewrite in a less disgusting way
 def get_and_format_ga_data():
     from fc import google_analytics_query as gaq
     ga_list = gaq.get_ga_stats_for_last_week()
@@ -82,14 +83,16 @@ def get_and_format_ga_data():
     g_share = 100 * gae_google_counter / gae_total_counter
     g_share_str = str(round(g_share, 1)) + '%'
     ga_text = '**Last 7 Days - GA4**\n\n📈 New website visitors: {}. \n🔍 {} ({}) from Google Search.\n\n'.format(str(gae_total_counter), str(gae_google_counter), g_share_str)
-    # Top 3 pages
+    # Top 5 pages
     try:
         for item in ga_list:
             item.pop(0)
         p_one = ga_list[0][0]
         p_two = ga_list[1][0]
         p_three = ga_list[2][0]
-        p_one_counter = p_two_counter = p_three_counter = 0
+        p_four = ga_list[2][0]
+        p_five = ga_list[2][0]
+        p_one_counter = p_two_counter = p_three_counter = p_four_counter = p_five_counter = 0
         for item in ga_list:
             if item[0] == p_one:
                 p_one_counter += int(item[1])
@@ -97,13 +100,19 @@ def get_and_format_ga_data():
                 p_two_counter += int(item[1])
             if item[0] == p_three:
                 p_three_counter += int(item[1])
-        bby = [(p_one, p_one_counter), (p_two, p_two_counter), (p_three, p_three_counter)]
+            if item[0] == p_four:
+                p_four_counter += int(item[1])
+            if item[0] == p_five:
+                p_five_counter += int(item[1])
+        bby = [(p_one, p_one_counter), (p_two, p_two_counter), (p_three, p_three_counter), (p_four, p_four_counter), (p_five, p_five_counter)]
         string_to_add = '**Top Pages by New Users** 🔝\n'
         s_one = '#1: {} - {}'.format(str(bby[0][0]), str(bby[0][1]))
         s_two = '#2: {} - {}'.format(str(bby[1][0]), str(bby[1][1]))
         s_three = '#3: {} - {}'.format(str(bby[2][0]), str(bby[2][1]))
-        superstring = string_to_add + '\n' + s_one + '\n' + s_two + '\n' + s_three
+        s_four = '#4: {} - {}'.format(str(bby[3][0]), str(bby[3][1]))
+        s_five = '#5: {} - {}'.format(str(bby[4][0]), str(bby[4][1]))
+        superstring = string_to_add + '\n' + s_one + '\n' + s_two + '\n' + s_three + '\n' + s_four + '\n' + s_five
         ga_text = ga_text + superstring
     except:
-        ga_text = ga_text + 'But getting top-3 pages failed 🤦‍♂️'
+        ga_text = ga_text + 'Oh shit, getting top-5 pages failed 🤦‍♂️'
     return ga_text
