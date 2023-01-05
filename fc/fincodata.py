@@ -14,7 +14,6 @@ finco_chat_id = os.environ.get('FC_GROUP_CHAT_ID')
 def get_fc_message(query_name):
     message_text = get_yesterday_text(query_period='yesterday')
     weekday = datetime.datetime.today().weekday()
-    possible_doers = ['@ayy_em', '@aaronhzl']
     if weekday == 1 or weekday == 4:
         activity_num = random.randint(1, 5)
         if activity_num == 1:
@@ -28,17 +27,16 @@ def get_fc_message(query_name):
             string_random_activity = 'Pick a random bank, and check if the terms/fees/products in the model are up-to-date.'
         else:
             string_random_activity = 'Respond to one HARO request.'
-        string_random_text = "It's random activity for random person day!\nActivity: " + string_random_activity + '\nAnd the random person to do that today is... {}!'.format(str(random.choice(possible_doers)))
+        string_random_text = "Random Activity: " + string_random_activity
         msg.send_message(chat_id=finco_chat_id, text=esc.escape_shit(string_random_text))
     elif weekday == 2:
-        text_social = "Okay, one (1️) social post, just announcing a recent article or review, to be scheduled Friday 10:30, alright??\nOkay, let's throw the dice! 🎲\nAlright! This week's post is by the star SMM guy...\nAnd his name is ... {}!".format(str(random.choice(possible_doers)))
+        text_social = "Okay, one (1️) social post, just announcing a recent article or review, to be scheduled Friday 10:30, alright??"
         msg.send_message(chat_id=finco_chat_id, text=esc.escape_shit(text_social))
 
     return message_text
 
 
 def get_yesterday_text(query_period):
-    data_json = get_fc_data(query_period)
     greetings_list = [
         "Good morning! 🌞 Here are the stats. ",
         "Hey-hey people 👋 FinCo stats here. ",
@@ -55,23 +53,8 @@ def get_yesterday_text(query_period):
         "Start your day with super-inaccurate stats!"
     ]
     text_one = random.choice(greetings_list) + "\n"
-    text_one = text_one + data_json['period']
-    data_json.pop('period')
-    clicks_total = len(data_json)
-    if 0 < clicks_total < 8:
-        text_two = "\n\nRedirects to partners: {}. Here's a list:\n".format(str(clicks_total))
-        for click in data_json:
-            text_line = '- ' + data_json[click]['when'][:5] + ' - ' + data_json[click]['where'] + ' - ' + \
-                        data_json[click]['uc']
-            text_two = text_two + text_line + '\n'
-    elif clicks_total >= 8:
-        text_two = "\nBE redirects yesterday: {}.\n".format(str(clicks_total))
-    else:
-        text_two = '\nZero redirects to partners. Feels bad, man. 😔\n'
-
-    text = text_one + text_two
     try:
-        text = text + '\n' + get_and_format_ga_data()
+        text = text_one + '\n' + get_and_format_ga_data()
     except Exception as e:
         msg.send_message(text=esc.escape_shit('Oh and btw, fetching GA data failed and this is why:'), chat_id=os.environ.get('FC_GROUP_CHAT_ID'))
         msg.send_message(text=esc.escape_shit(str(e)), chat_id=os.environ.get('FC_GROUP_CHAT_ID'))
@@ -79,6 +62,7 @@ def get_yesterday_text(query_period):
 
 
 def get_fc_data(query_period):
+    """ No longer in use """
     url_to_poke = 'https://fintechcompass.net/api/query/clicks/{}/'.format(query_period)
     r = requests.get(url_to_poke)
     data_json = r.json()
