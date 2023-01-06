@@ -90,8 +90,8 @@ def get_and_format_ga_data():
         p_one = ga_list[0][0]
         p_two = ga_list[1][0]
         p_three = ga_list[2][0]
-        p_four = ga_list[2][0]
-        p_five = ga_list[2][0]
+        p_four = ga_list[3][0]
+        p_five = ga_list[4][0]
         p_one_counter = p_two_counter = p_three_counter = p_four_counter = p_five_counter = 0
         for item in ga_list:
             if item[0] == p_one:
