@@ -6,7 +6,7 @@ import requests
 
 from utils import escape_shit as esc
 from utils import messages as msg
-
+from fc import crux_report
 
 finco_chat_id = os.environ.get('FC_GROUP_CHAT_ID')
 
@@ -32,7 +32,11 @@ def get_fc_message(query_name):
     elif weekday == 2:
         text_social = "Okay, one (1️) social post, just announcing a recent article or review, to be scheduled Friday 10:30, alright??"
         msg.send_message(chat_id=finco_chat_id, text=esc.escape_shit(text_social))
-
+    try:
+        crux_string = crux_report.get_crux_string()
+        message_text += crux_string
+    except Exception as e:
+        msg.send_message(chat_id=finco_chat_id, text=esc.escape_shit('Whoopsies, fetching CrUX data failed because of this:\n' + str(e)))
     return message_text
 
 
