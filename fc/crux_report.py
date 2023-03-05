@@ -45,3 +45,6 @@ def get_crux_string():
     crux_mobile = get_crux_api_report(form_factor='PHONE')
     crux_string = crux_header + crux_desktop + '\n\n' + crux_mobile
     return crux_string
+
+if __name__ == '__main__':
+    print(get_crux_string())

@@ -21,6 +21,7 @@ def send_message(text, chat_id=test_channel_id, parse_mode='MarkdownV2', disable
     }
     request_url = base_url + "sendMessage"
     r = requests.post(request_url, data=data_json)
+    print(r.text)
 
 
 def send_photo(caption, photo, chat_id=test_channel_id, parse_mode='MarkdownV2', disable_notification=True):

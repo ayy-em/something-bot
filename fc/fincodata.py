@@ -34,7 +34,7 @@ def get_fc_message(query_name):
         msg.send_message(chat_id=finco_chat_id, text=esc.escape_shit(text_social))
     try:
         crux_string = crux_report.get_crux_string()
-        message_text += crux_string
+        message_text += esc.escape_shit(crux_string)
     except Exception as e:
         msg.send_message(chat_id=finco_chat_id, text=esc.escape_shit('Whoopsies, fetching CrUX data failed because of this:\n' + str(e)))
     return message_text
