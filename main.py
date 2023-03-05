@@ -6,6 +6,7 @@ from utils import messages as msgs
 from utils import update_handler as uh
 from utils import response as rsp
 from stuff_for_ira import tiktok as tt
+from stuff_for_ira import hellofresh as hf
 from reminders import nastya_dinner
 
 from flask import Flask, request
@@ -44,6 +45,13 @@ def process_dyk_one(thing):
 def poke_bettyford_tiktok():
     print('@@ Starting the Tiktok flow')
     tt.poke_ira_for_tiktok()
+    return "@@ Poke Ira TikTok complete"
+
+
+@app.route('/poke/bettyford/hellofresh')
+def poke_bettyford_tiktok():
+    print('@@ Starting the HelloFresh flow')
+    hf.poke_ira_for_hellofresh()
     return "@@ Poke Ira TikTok complete"
 
 
