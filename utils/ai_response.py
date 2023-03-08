@@ -25,9 +25,9 @@ def get_ai_response(prompt):
         return response['data'][0]['url'], 'image_url'
     else:
         response = openai.Completion.create(
-            model="text-davinci-003",
+            model="gpt-3.5-turbo",
             prompt=prompt,
             temperature=0.35,
-            max_tokens=100
+            max_tokens=200
         )
         return response['choices'][0]['text'], 'text'
