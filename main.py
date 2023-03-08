@@ -49,7 +49,7 @@ def poke_bettyford_tiktok():
 
 
 @app.route('/poke/bettyford/hellofresh')
-def poke_bettyford_tiktok():
+def poke_bettyford_hellofresh():
     print('@@ Starting the HelloFresh flow')
     hf.poke_ira_for_hellofresh()
     return "@@ Poke Ira TikTok complete"
