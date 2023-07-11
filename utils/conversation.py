@@ -17,7 +17,9 @@ def respond_unknown(text):
     try:
         answer = ai_response.get_ai_response(text)
         return answer
-    except:
+    except Exception as e:
+        print('Open AI API error')
+        print(e)
         return random.choice(strings.unknown_message_response)
 
 

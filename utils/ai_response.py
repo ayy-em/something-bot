@@ -24,10 +24,16 @@ def get_ai_response(prompt):
         )
         return response['data'][0]['url'], 'image_url'
     else:
-        response = openai.Completion.create(
+        response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
-            prompt=prompt,
-            temperature=0.35,
+            messages=[
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            temperature=0.75,
+            frequency_penalty=0.8,
             max_tokens=200
         )
         return response['choices'][0]['text'], 'text'
