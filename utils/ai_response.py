@@ -10,10 +10,10 @@ def get_ai_response(prompt):
         prompt = prompt[20:95] if len(prompt[20:]) > 75 else prompt[20:]
     else:
         prompt = prompt[:75] if len(prompt) > 75 else prompt
-    if prompt[:5] == 'image':
-        if prompt[:10] == 'image of a':
+    if prompt[:5].lower() == 'image':
+        if prompt[:10].lower() == 'image of a':
             prompt = prompt[11:]
-        elif prompt[:8] == 'image of':
+        elif prompt[:8].lower() == 'image of':
             prompt = prompt[9:]
         else:
             prompt = prompt[6:]
@@ -36,4 +36,4 @@ def get_ai_response(prompt):
             frequency_penalty=0.8,
             max_tokens=200
         )
-        return response['choices'][0]['text'], 'text'
+        return response['choices'][0]['message']['content'], 'text'
