@@ -17,11 +17,7 @@ cron:
     timezone: Europe/Amsterdam
   - description: "Poke Ira about TikTok - Friday"
     url: /poke/bettyford/tiktok
-    schedule: every friday 16:00
-    timezone: Europe/Amsterdam
-  - description: "Poke Ira about HelloFresh - Tuesday"
-    url: /poke/bettyford/hellofresh
-    schedule: every tuesday 15:30
+    schedule: every friday 11:00
     timezone: Europe/Amsterdam
   - description: "FinCo - Send me yesterday clicks"
     url: /finco/query/yesterday

@@ -4,6 +4,10 @@ from utils import messages as msgs
 from utils import escape_shit as esc
 
 
+"""
+HELLOFRESH IS DEPRECATED
+"""
+
 def get_hellofresh_poke_message():
     hellofresh_message = "Привет, Ириндика 👋\nНе забудь выбрать ХеллоуФреш на след неделю!"
     message_text = esc.escape_shit(hellofresh_message)
