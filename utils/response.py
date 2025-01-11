@@ -68,7 +68,10 @@ def respond_to_direct_message(update):
             test_message_text = 'Double exception!\nBut I just saw this message:\n\n{}'.format(
                     esc.escape_shit(reply_msg)
             )
-    msgs.send_test_message(txt=esc.escape_shit(test_message_text))
+    try:
+        msgs.send_test_message(txt=test_message_text)
+    except:
+        msgs.send_test_message(txt=esc.escape_shit(test_message_text))
 
 
 def util_check_if_im_present_in_chat(update):
