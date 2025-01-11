@@ -35,7 +35,7 @@ def respond_to_group(update):
             msgs.send_message(text=esc.escape_shit(response_string), chat_id=update.message_chat_from, parse_mode='MarkdownV2', disable_notification=True)
     else:
         if not util_check_if_im_present_in_chat(update):
-            msgs.send_test_message(txt=esc.escape_shit('Got this Groupchat msg: ' + update.text_message_text))
+            msgs.send_test_message(txt=esc.escape_shit('Got this Groupchat msg:\n{}\n\nIt came from {}.'.format(update.text_message_text, update.message_chat_from)))
 
 
 def respond_to_direct_message(update):
@@ -44,7 +44,7 @@ def respond_to_direct_message(update):
         reply_msg = cmds.process_command(message_text_received)
     else:
         reply_msg = cnv.process_text(message_text_received)
-        if type(reply_msg) == str:
+        if isinstance(reply_msg, str):
             msgs.send_message(text=esc.escape_shit(reply_msg), chat_id=update.message_chat_from)
         else:
             response_string = reply_msg[0]
@@ -54,21 +54,26 @@ def respond_to_direct_message(update):
             else:
                 msgs.send_message(text=esc.escape_shit(response_string), chat_id=update.message_chat_from,
                                   parse_mode='MarkdownV2', disable_notification=True)
+    # Log the message in #test-channel
     try:
-        test_message_text = 'I saw a {} message\nIt came from here: {}\nAnd it looks like this:\n\n{}'.format(update.message_destination, update.message_chat, reply_msg)
+        test_message_text = 'Hey! Just got a {} message.\nIt came from here:\n{}\n\nAnd it looks like this:\n{}'.format(
+                update.message_destination, update.message_chat, esc.escape_shit(message_text_received)
+        )
     except:
         try:
-            test_message_text = 'Exception caught!\nI saw a {} message\nIt came from here: {}\nAnd it looks like this:\n\n{}'.format(
-                update.message_destination, update.message_chat_from, reply_msg)
+            test_message_text = 'Exception caught!\nI saw a {} message\nIt came from here: \n{}\nAnd it looks like this:\n\n{}'.format(
+                update.message_destination, update.message_chat_from, esc.escape_shit(message_text_received)
+            )
         except:
-            test_message_text = 'Double exception!\nBut I just saw this message:\n\n' + reply_msg
+            test_message_text = 'Double exception!\nBut I just saw this message:\n\n{}'.format(
+                    esc.escape_shit(reply_msg)
+            )
     msgs.send_test_message(txt=esc.escape_shit(test_message_text))
 
 
 def util_check_if_im_present_in_chat(update):
     if update.message_chat_from != os.getenv('FC_GROUP_CHAT_ID'):
-        if update.message_chat['title'] != 'Vibing':
+        if update.message_chat['title'] not in ('Vibing', 'test-channel'):
             if update.message_chat_from != os.getenv('PSDLK_TG_CHAT_ID'):
-                if update.message_chat_from != os.getenv('FC_GROUP_CHAT_ID'):
-                    return True
+                return True
     return False
