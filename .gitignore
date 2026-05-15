@@ -1,8 +1,45 @@
-.idea
+# Google Cloud
 app.yaml
-venv/*
-venv/
-stuff.txt
-.gcloudignore
 creds/*
-something-bot-338300-375c9c060f67.json
+*.json
+
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+.ruff_cache/
+
+# pytest
+.pytest_cache/
+
+# LLMs
+.claude
+CLAUDE.md
+
+# IDEs
+.cursor/
+.vscode/
+.idea/
+
+# Virtual environments
+venv/
+.venv/
+uv.lock
+
+# sensitive files
+.env
+creds.json
+
+# OS
+.DS_Store
+
+# artifacts of any sorts
+dist/
+build/
+inputs/
+outputs/
+past_inputs/
+*.json
