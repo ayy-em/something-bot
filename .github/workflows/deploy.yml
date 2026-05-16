@@ -1,0 +1,89 @@
+name: Deploy
+
+on:
+  push:
+    branches: [master]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - '.github/ISSUE_TEMPLATE/**'
+
+permissions:
+  contents: read
+
+env:
+  PROJECT_ID: something-bot-338300
+  REGION: europe-west4
+  SERVICE_NAME: something-really-bot-cloudrun
+  RUNTIME_SA: something-bot-cloudrun-sa@something-bot-338300.iam.gserviceaccount.com
+  ARTIFACT_REPO: something-really-bot-artifacts
+  IMAGE_NAME: something-really-bot
+
+jobs:
+  checks:
+    uses: ./.github/workflows/_checks.yml
+
+  deploy:
+    name: Build, push, deploy
+    runs-on: ubuntu-latest
+    needs: checks
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to GCP via Workload Identity Federation
+        # If this step fails, verify that:
+        #   - Terraform from #8 has been applied against ${PROJECT_ID}.
+        #   - The GCP_WORKLOAD_IDENTITY_PROVIDER and GCP_DEPLOYER_SERVICE_ACCOUNT
+        #     repo secrets are set (terraform output -raw workload_identity_provider
+        #     and deployer_service_account_email).
+        # Do not fall back to JSON keys; the whole point is OIDC.
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Compute image references
+        id: image
+        run: |
+          base="${REGION}-docker.pkg.dev/${PROJECT_ID}/${ARTIFACT_REPO}/${IMAGE_NAME}"
+          echo "sha_tag=${base}:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          echo "latest_tag=${base}:latest" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ steps.image.outputs.sha_tag }}
+            ${{ steps.image.outputs.latest_tag }}
+          provenance: false
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy "${SERVICE_NAME}" \
+            --project="${PROJECT_ID}" \
+            --region="${REGION}" \
+            --image="${{ steps.image.outputs.sha_tag }}" \
+            --service-account="${RUNTIME_SA}" \
+            --quiet
+
+      - name: Print deployed revision URL
+        run: |
+          gcloud run services describe "${SERVICE_NAME}" \
+            --project="${PROJECT_ID}" \
+            --region="${REGION}" \
+            --format='value(status.url)'

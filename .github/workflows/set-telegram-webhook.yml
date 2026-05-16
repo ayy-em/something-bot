@@ -1,0 +1,100 @@
+name: Set Telegram webhook
+
+# Manual-only. Calls Telegram's setWebhook for the chosen bot, pointing at the
+# currently-deployed Cloud Run service. Run this once after the first successful
+# deploy of the /webhook route (#10), and again whenever the URL or webhook
+# secret rotates. Bot token and webhook secret are pulled from Secret Manager at
+# runtime and masked in logs.
+
+on:
+  workflow_dispatch:
+    inputs:
+      bot_key:
+        description: 'Bot key as defined in infra/terraform variables.bots (default: "default").'
+        type: string
+        default: default
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  PROJECT_ID: something-bot-338300
+  REGION: europe-west4
+  SERVICE_NAME: something-really-bot-cloudrun
+
+jobs:
+  set-webhook:
+    name: Set Telegram webhook
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Authenticate to GCP via Workload Identity Federation
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Resolve Cloud Run URL
+        id: url
+        run: |
+          url=$(gcloud run services describe "${SERVICE_NAME}" \
+            --project="${PROJECT_ID}" \
+            --region="${REGION}" \
+            --format='value(status.url)')
+          if [ -z "${url}" ]; then
+            echo "::error::Could not resolve Cloud Run URL for ${SERVICE_NAME}." >&2
+            exit 1
+          fi
+          echo "webhook_url=${url}/webhook" >> "$GITHUB_OUTPUT"
+
+      - name: Fetch bot token + webhook secret (masked)
+        id: secrets
+        run: |
+          set -eu
+          bot_secret="telegram-bot-token-${{ inputs.bot_key }}"
+          webhook_secret_name="telegram-webhook-secret-${{ inputs.bot_key }}"
+
+          bot_token=$(gcloud secrets versions access latest \
+            --project="${PROJECT_ID}" --secret="${bot_secret}")
+          echo "::add-mask::${bot_token}"
+
+          webhook_secret=$(gcloud secrets versions access latest \
+            --project="${PROJECT_ID}" --secret="${webhook_secret_name}")
+          echo "::add-mask::${webhook_secret}"
+
+          {
+            echo "bot_token<<EOF"
+            echo "${bot_token}"
+            echo "EOF"
+            echo "webhook_secret<<EOF"
+            echo "${webhook_secret}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Call Telegram setWebhook
+        env:
+          BOT_TOKEN: ${{ steps.secrets.outputs.bot_token }}
+          WEBHOOK_SECRET: ${{ steps.secrets.outputs.webhook_secret }}
+          WEBHOOK_URL: ${{ steps.url.outputs.webhook_url }}
+        run: |
+          set -eu
+          response=$(curl -sS -X POST \
+            "https://api.telegram.org/bot${BOT_TOKEN}/setWebhook" \
+            --data-urlencode "url=${WEBHOOK_URL}" \
+            --data-urlencode "secret_token=${WEBHOOK_SECRET}" \
+            --data-urlencode "drop_pending_updates=true")
+
+          echo "Telegram setWebhook response:"
+          echo "${response}"
+
+          ok=$(echo "${response}" | jq -r '.ok')
+          if [ "${ok}" != "true" ]; then
+            echo "::error::Telegram setWebhook failed: $(echo "${response}" | jq -r '.description // .')" >&2
+            exit 1
+          fi

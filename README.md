@@ -54,6 +54,35 @@ curl http://localhost:8080/healthz   # -> {"status":"ok"}
 See [`docs/architecture.md`](./docs/architecture.md) for the package tree and
 which issue introduces real logic into each layer.
 
+## CI/CD
+
+Three GitHub Actions workflows live under `.github/workflows/`:
+
+| Workflow | Trigger | What it does |
+| --- | --- | --- |
+| `ci.yml` | PR to `master` | Runs `ruff format --check`, `ruff check`, `pytest`, `terraform fmt -check`, `terraform validate` via the reusable `_checks.yml`. |
+| `deploy.yml` | Push to `master` (markdown/docs paths ignored) | Re-runs the checks, then builds the Docker image, pushes both `${{ github.sha }}` and `latest` tags to Artifact Registry, then `gcloud run deploy` to Cloud Run. Auth via OIDC / Workload Identity Federation only. |
+| `set-telegram-webhook.yml` | `workflow_dispatch` only | Manually points the chosen bot's Telegram webhook at the currently-deployed Cloud Run service. Bot token + webhook secret read from Secret Manager at runtime and masked. |
+
+### Required GitHub repo secrets
+
+| Secret | Value (from `infra/terraform/` outputs) |
+| --- | --- |
+| `GCP_WORKLOAD_IDENTITY_PROVIDER` | `terraform output -raw workload_identity_provider` |
+| `GCP_DEPLOYER_SERVICE_ACCOUNT` | `terraform output -raw deployer_service_account_email` |
+
+No long-lived JSON service-account keys. The legacy `GOOGLE_APPLICATION_CREDENTIALS` secret retires after the first successful OIDC deploy.
+
+### One-time setup checklist (manual)
+
+Before the first deploy can succeed, you need to have already done the steps below — the workflow files themselves are inert until then.
+
+1. Apply the Terraform from `infra/terraform/` (see [`infra/terraform/README.md`](./infra/terraform/README.md) for the bootstrap commands).
+2. Read the two outputs above and set them as repo secrets in GitHub.
+3. Push to `master` (or merge a PR) to trigger the first deploy.
+4. Once Cloud Run reports the new image deployed, run the `Set Telegram webhook` workflow from the Actions tab — but **only after** the `/webhook` route exists (lands in #10), otherwise Telegram will be pointed at a 404.
+5. Retire `GOOGLE_APPLICATION_CREDENTIALS` from repo secrets and rotate the underlying GCP service account key.
+
 ## Channels you should totally check out
 
 - https://t.me/maymays_unlimited - English - Three memes a day, every day
