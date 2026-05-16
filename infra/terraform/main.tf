@@ -264,8 +264,14 @@ resource "google_cloud_run_v2_service" "main" {
   }
 
   lifecycle {
+    # Image and env vars are owned by the deploy workflow (gcloud run deploy
+    # --image / --set-secrets in .github/workflows/deploy.yml). Without these
+    # ignores, every `terraform apply` would strip the secret env vars the
+    # workflow injects (TELEGRAM_WEBHOOK_SECRET, TELEGRAM_BOT_TOKEN,
+    # TELEGRAM_QA_USERS) and the next revision would crash on boot.
     ignore_changes = [
       template[0].containers[0].image,
+      template[0].containers[0].env,
     ]
   }
 
