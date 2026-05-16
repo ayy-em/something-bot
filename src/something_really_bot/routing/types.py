@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
 from something_really_bot.config import Settings
+from something_really_bot.persistence import PersistenceService
 from something_really_bot.telegram.models import ParsedUpdate
 
 
@@ -23,11 +24,10 @@ class BotContext:
 
     settings: Settings
     bot_id: str = "default"
-    # Filled in by their respective issues. Typed as Any for now so feature
-    # code can be written against them in advance without forcing those
-    # types to exist yet.
     telegram_client: Any | None = None
-    bigquery_client: Any | None = None
+    persistence: PersistenceService | None = None
+    # Filled in by the GCS file-storage issue (#20). Typed as Any so feature
+    # code can be written against it before the concrete service exists.
     gcs_client: Any | None = None
 
 

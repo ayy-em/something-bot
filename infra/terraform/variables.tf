@@ -72,6 +72,18 @@ variable "bots" {
   }
 }
 
+variable "bigquery_dataset_id" {
+  description = "BigQuery dataset for persistence (RFC #17 / decision 0001)."
+  type        = string
+  default     = "something_bot"
+}
+
+variable "bigquery_location" {
+  description = "BigQuery dataset location. EU multi-region matches the europe-west4 Cloud Run runtime."
+  type        = string
+  default     = "EU"
+}
+
 variable "openai_api_key_secret_name" {
   description = "Existing Secret Manager secret holding the OpenAI API key. Upper-snake-cased intentionally to match the legacy app.yaml env var name."
   type        = string

@@ -1,7 +1,8 @@
-"""Tests for :mod:`something_really_bot.features.commands.handler`."""
+"""Tests for :mod:`something_really_bot.features.commands.handler`.
 
-from dataclasses import dataclass, field
-from typing import Any
+Handlers are pure — they return :class:`HandlerResult` with ``reply_text``
+set; webhook orchestration covers the actual send.
+"""
 
 import pytest
 from pydantic import SecretStr
@@ -27,22 +28,13 @@ from something_really_bot.telegram.parser import parse_update
 USER_ID = 42
 
 
-@dataclass
-class _FakeClient:
-    calls: list[dict[str, Any]] = field(default_factory=list)
-
-    async def send_message(self, chat_id: int, text: str) -> dict[str, Any]:
-        self.calls.append({"chat_id": chat_id, "text": text})
-        return {"message_id": 1}
-
-
-def _ctx(client: _FakeClient | None = None) -> BotContext:
+def _ctx() -> BotContext:
     settings = Settings.model_construct(
         telegram_webhook_secret=SecretStr("x"),
         telegram_bot_token=SecretStr("tok"),
         telegram_qa_user_ids=frozenset(),
     )
-    return BotContext(settings=settings, telegram_client=client)
+    return BotContext(settings=settings)
 
 
 def _private_command(command: str) -> PrivateMessage:
@@ -87,18 +79,16 @@ def _supergroup_command(command: str) -> SupergroupMessage:
         (HelpCommandHandler, "/help", HELP_REPLY),
     ],
 )
-async def test_command_in_private_chat_sends_static_reply(
+async def test_command_in_private_chat_returns_static_reply(
     handler_cls: type, command: str, expected_reply: str
 ) -> None:
     handler = handler_cls()
-    fake = _FakeClient()
 
-    result = await handler.handle(_private_command(command), _ctx(client=fake))
+    result = await handler.handle(_private_command(command), _ctx())
 
     assert result.handled is True
     assert result.handler_name == handler_cls.name
     assert result.reply_text == expected_reply
-    assert fake.calls == [{"chat_id": USER_ID, "text": expected_reply}]
 
 
 @pytest.mark.parametrize(
@@ -179,12 +169,3 @@ async def test_command_with_at_bot_suffix_still_matches_via_parser(
     parsed = parse_update(payload)
 
     assert handler_cls().matches(parsed, _ctx()) is True
-
-
-async def test_handle_without_client_does_not_crash() -> None:
-    handler = StartCommandHandler()
-
-    result = await handler.handle(_private_command("/start"), _ctx(client=None))
-
-    assert result.handled is True
-    assert result.reply_text == START_REPLY

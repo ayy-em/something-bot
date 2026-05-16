@@ -48,7 +48,7 @@ ahead of implementation. Each layer is replaced as its issue lands.
 | Telegram client + parser | `telegram/` | #12, #13 |
 | Routing / dispatcher | `routing/` | #14 |
 | Feature handlers | `features/` | #15, #16, #20, #23 … |
-| BigQuery persistence | `persistence/` | #17 (RFC — [0001-bigquery-schema](decisions/0001-bigquery-schema.md)), #18 |
+| BigQuery persistence | `persistence/` | #17 (RFC — [0001-bigquery-schema](decisions/0001-bigquery-schema.md)), #18 (implementation) |
 | GCS file storage | `file_storage/` | #20 |
 | Cross-feature services | `services/` | as needed |
 | Config / secrets | `config.py` | #12 onward |
@@ -66,7 +66,33 @@ BigQuery dataset `something_bot` (location `EU`) holds five tables:
 `bot_responses`, `processing_events`. Time-partitioned by event date,
 clustered by `bot_id` + the most-selective discriminator per table. Full
 column list and migration policy: [decisions/0001-bigquery-schema.md](decisions/0001-bigquery-schema.md).
-Terraform resources + the persistence service land in #18.
+
+Resources are defined in `infra/terraform/bigquery.tf`. The Cloud Run
+runtime SA holds `roles/bigquery.dataEditor` on the dataset.
+
+The Python interface is `persistence.PersistenceService` (Protocol).
+Concrete implementation: `persistence.bigquery.BigQueryPersistence`, which
+streams rows via `insert_rows_json`. Every persistence call is best-effort
+— exceptions and per-row partial failures are logged but never propagate,
+so the webhook keeps returning 200 to Telegram regardless of BigQuery
+health (SPEC §6.9).
+
+### Webhook flow
+
+Per request, `POST /webhook` runs:
+
+1. Parse the JSON body (`parse_update`). Malformed payloads short-circuit
+   with a `malformed_update` event row.
+2. Persist the raw payload to `telegram_updates_raw`.
+3. Build and persist a `telegram_messages` row (and, for photo / document
+   / voice content, a `telegram_files` row).
+4. Dispatch to the matching handler. Handlers are pure — they return a
+   `HandlerResult` with optional `reply_text` and never call out to
+   Telegram or BigQuery directly.
+5. If `reply_text` is set, the webhook sends it via `TelegramClient` and
+   writes a row to `bot_responses` (success or failure either way).
+6. Errored or unhandled outcomes emit a `processing_events` row.
+7. Return `200 {"status": "ok"}`.
 
 ## Conventions
 

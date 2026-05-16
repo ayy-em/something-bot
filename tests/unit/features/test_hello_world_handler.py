@@ -1,7 +1,9 @@
-"""Tests for :mod:`something_really_bot.features.hello_world.handler`."""
+"""Tests for :mod:`something_really_bot.features.hello_world.handler`.
 
-from dataclasses import dataclass, field
-from typing import Any
+The handler is pure — it returns :class:`HandlerResult` with ``reply_text``
+set; the webhook is responsible for sending. Sending behavior is covered
+in :mod:`tests.unit.test_webhook_dispatch`.
+"""
 
 import pytest
 from pydantic import SecretStr
@@ -25,19 +27,7 @@ IRINDICA_CHAT_ID = 159278882
 RANDO_ID = 99999999
 
 
-@dataclass
-class _FakeClient:
-    """Records send_message calls so tests can assert against them."""
-
-    calls: list[dict[str, Any]] = field(default_factory=list)
-
-    async def send_message(self, chat_id: int, text: str) -> dict[str, Any]:
-        self.calls.append({"chat_id": chat_id, "text": text})
-        return {"message_id": 1}
-
-
 def _settings(allowlist: frozenset[int]) -> Settings:
-    """Build a Settings with the two required secrets and the given allowlist."""
     return Settings.model_construct(
         telegram_webhook_secret=SecretStr("x"),
         telegram_bot_token=SecretStr("tok"),
@@ -45,8 +35,8 @@ def _settings(allowlist: frozenset[int]) -> Settings:
     )
 
 
-def _ctx(allowlist: frozenset[int], client: _FakeClient | None = None) -> BotContext:
-    return BotContext(settings=_settings(allowlist), telegram_client=client)
+def _ctx(allowlist: frozenset[int]) -> BotContext:
+    return BotContext(settings=_settings(allowlist))
 
 
 def _private_text(user_id: int, text: str = "hi there") -> PrivateMessage:
@@ -104,10 +94,9 @@ async def test_matches_private_text_from_qa_user(user_id: int) -> None:
 
 
 @pytest.mark.parametrize("user_id", [JM_TG_ID, IRINDICA_CHAT_ID])
-async def test_handle_sends_parrot_reply(user_id: int) -> None:
+async def test_handle_returns_parrot_reply(user_id: int) -> None:
     handler = HelloWorldHandler()
-    fake = _FakeClient()
-    ctx = _ctx(frozenset({JM_TG_ID, IRINDICA_CHAT_ID}), client=fake)
+    ctx = _ctx(frozenset({JM_TG_ID, IRINDICA_CHAT_ID}))
     update = _private_text(user_id, text="pong me")
 
     result = await handler.handle(update, ctx)
@@ -115,7 +104,6 @@ async def test_handle_sends_parrot_reply(user_id: int) -> None:
     assert result.handled is True
     assert result.handler_name == "hello_world.parrot"
     assert result.reply_text == "Hello World\n\nYou said: pong me"
-    assert fake.calls == [{"chat_id": user_id, "text": "Hello World\n\nYou said: pong me"}]
 
 
 async def test_does_not_match_unknown_user() -> None:
@@ -176,14 +164,3 @@ async def test_does_not_match_when_allowlist_empty() -> None:
     ctx = _ctx(frozenset())
 
     assert handler.matches(_private_text(JM_TG_ID), ctx) is False
-
-
-async def test_handle_without_client_does_not_crash() -> None:
-    """Defensive: if telegram_client is None we still return cleanly, no HTTP."""
-    handler = HelloWorldHandler()
-    ctx = _ctx(frozenset({JM_TG_ID}), client=None)
-
-    result = await handler.handle(_private_text(JM_TG_ID, text="x"), ctx)
-
-    assert result.handled is True
-    assert result.reply_text == "Hello World\n\nYou said: x"

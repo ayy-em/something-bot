@@ -62,7 +62,10 @@ class Settings(BaseSettings):
     )
 
     # --- BigQuery / GCS (#18, #20) ---
-    bigquery_dataset: str | None = None
+    bigquery_dataset: str = Field(
+        default="something_bot",
+        description="BigQuery dataset for persistence (RFC #17 / decision 0001).",
+    )
     gcs_bucket: str | None = None
 
     @field_validator("telegram_qa_user_ids", mode="before")

@@ -8,6 +8,7 @@ license = { text = "Proprietary" }
 authors = [{ name = "STX Group" }]
 dependencies = [
     "fastapi>=0.136,<0.137",
+    "google-cloud-bigquery>=3.41,<4",
     "httpx>=0.28,<0.29",
     "pydantic-settings>=2.14,<3",
     "uvicorn[standard]>=0.47,<0.48",
