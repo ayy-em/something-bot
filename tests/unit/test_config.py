@@ -60,6 +60,38 @@ def test_qa_user_ids_extracts_jm_and_irindica(monkeypatch: pytest.MonkeyPatch) -
     assert settings.telegram_qa_user_ids == frozenset({JM_TG_ID, IRINDICA_CHAT_ID})
 
 
+def test_irindica_chat_id_parsed_from_same_secret(monkeypatch: pytest.MonkeyPatch) -> None:
+    _set_required_env(monkeypatch)
+    monkeypatch.setenv(
+        "TELEGRAM_QA_USERS",
+        json.dumps({"JM_TG_ID": JM_TG_ID, "IRINDICA_CHAT_ID": IRINDICA_CHAT_ID}),
+    )
+
+    settings = Settings(_env_file=None)
+
+    assert settings.irindica_chat_id == IRINDICA_CHAT_ID
+
+
+def test_irindica_chat_id_none_when_key_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    _set_required_env(monkeypatch)
+    monkeypatch.setenv("TELEGRAM_QA_USERS", json.dumps({"JM_TG_ID": JM_TG_ID}))
+
+    settings = Settings(_env_file=None)
+
+    assert settings.irindica_chat_id is None
+    # And the allowlist still works partially
+    assert settings.telegram_qa_user_ids == frozenset({JM_TG_ID})
+
+
+def test_irindica_chat_id_none_when_malformed_json(monkeypatch: pytest.MonkeyPatch) -> None:
+    _set_required_env(monkeypatch)
+    monkeypatch.setenv("TELEGRAM_QA_USERS", "{not valid")
+
+    settings = Settings(_env_file=None)
+
+    assert settings.irindica_chat_id is None
+
+
 def test_qa_user_ids_ignores_non_qa_keys(monkeypatch: pytest.MonkeyPatch) -> None:
     """Other secret keys (group/channel targets) are not allowlisted."""
     _set_required_env(monkeypatch)

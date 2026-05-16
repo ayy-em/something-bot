@@ -9,13 +9,12 @@ locals {
   # Per-job configuration. Issues #24 (tiktok-reminder) and #25
   # (finco-daily-stats) each add one entry here when they land.
   scheduled_jobs = {
-    # Example, kept commented so #24/#25 can paste-replace verbatim:
-    # tiktok-reminder = {
-    #   schedule    = "0 11 * * 5"        # Friday 11:00
-    #   timezone    = "Europe/Amsterdam"
-    #   target_path = "/jobs/tiktok-reminder"
-    #   description = "Poke Ira about TikTok every Friday."
-    # }
+    tiktok-reminder = {
+      schedule    = "0 11 * * 5" # Friday 11:00
+      timezone    = "Europe/Amsterdam"
+      target_path = "/jobs/tiktok-reminder"
+      description = "Friday TikTok reminder for Irindica (#24)."
+    }
   }
 }
 
@@ -50,7 +49,7 @@ resource "google_cloud_scheduler_job" "jobs" {
 
   project     = var.project_id
   region      = var.region
-  name        = each.key
+  name        = "something-bot-${each.key}"
   description = each.value.description
   schedule    = each.value.schedule
   time_zone   = each.value.timezone

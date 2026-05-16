@@ -54,6 +54,15 @@ class Settings(BaseSettings):
             "ignored — they are routing targets, not QA users."
         ),
     )
+    irindica_chat_id: Annotated[int | None, NoDecode] = Field(
+        default=None,
+        validation_alias="TELEGRAM_QA_USERS",
+        description=(
+            "Irindica's private chat_id, extracted from the IRINDICA_CHAT_ID key "
+            "of the telegram-qa-users JSON secret. Used by the Friday TikTok "
+            "reminder job (#24). ``None`` if the key is absent or malformed."
+        ),
+    )
 
     # --- OpenAI (#23) ---
     openai_api_key: SecretStr | None = Field(
@@ -102,15 +111,8 @@ class Settings(BaseSettings):
     def _parse_qa_users(cls, raw: Any) -> Any:
         if not isinstance(raw, str):
             return raw
-        try:
-            payload = json.loads(raw)
-        except json.JSONDecodeError:
-            _logger.warning("telegram_qa_users_malformed_json")
-            return frozenset()
-        if not isinstance(payload, dict):
-            _logger.warning(
-                "telegram_qa_users_not_a_dict", extra={"actual_type": type(payload).__name__}
-            )
+        payload = _parse_qa_users_payload(raw)
+        if payload is None:
             return frozenset()
 
         ids: set[int] = set()
@@ -123,6 +125,41 @@ class Settings(BaseSettings):
             except (TypeError, ValueError):
                 _logger.warning("telegram_qa_users_unparseable_value", extra={"key": key})
         return frozenset(ids)
+
+    @field_validator("irindica_chat_id", mode="before")
+    @classmethod
+    def _parse_irindica_chat_id(cls, raw: Any) -> Any:
+        if not isinstance(raw, str):
+            return raw
+        payload = _parse_qa_users_payload(raw)
+        if payload is None:
+            return None
+        value = payload.get("IRINDICA_CHAT_ID")
+        if value is None:
+            return None
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+
+
+def _parse_qa_users_payload(raw: str) -> dict[str, Any] | None:
+    """Decode the ``telegram-qa-users`` JSON secret into a dict.
+
+    Returns ``None`` on any structural problem; specific field validators
+    log the warning so we don't double-log on every Settings construction.
+    """
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        _logger.warning("telegram_qa_users_malformed_json")
+        return None
+    if not isinstance(payload, dict):
+        _logger.warning(
+            "telegram_qa_users_not_a_dict", extra={"actual_type": type(payload).__name__}
+        )
+        return None
+    return payload
 
 
 @lru_cache(maxsize=1)

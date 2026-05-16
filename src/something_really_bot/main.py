@@ -32,6 +32,7 @@ from something_really_bot.features.example.handler import PingHandler
 from something_really_bot.features.file_storage.handler import FileStorageHandler
 from something_really_bot.features.hello_world.handler import HelloWorldHandler
 from something_really_bot.features.openai_fallback.handler import OpenAIFallbackHandler
+from something_really_bot.features.tiktok_reminder.handler import TikTokReminderJob
 from something_really_bot.file_storage.fetcher import get_file_fetcher
 from something_really_bot.logging import get_logger
 from something_really_bot.persistence import (
@@ -83,11 +84,13 @@ def build_default_dispatcher() -> Dispatcher:
 def build_default_job_registry() -> JobRegistry:
     """Construct the production scheduled-job registry.
 
-    #24 (tiktok-reminder) and #25 (finco-daily-stats) register their job
-    handlers here when they land. The matching Cloud Scheduler entries are
-    added to ``infra/terraform/scheduler.tf``.
+    The Cloud Scheduler entries that trigger these jobs live in
+    ``infra/terraform/scheduler.tf`` — one ``locals.scheduled_jobs`` entry
+    per handler registered here.
     """
-    return JobRegistry()
+    registry = JobRegistry()
+    registry.register(TikTokReminderJob())
+    return registry
 
 
 dispatcher: Dispatcher = build_default_dispatcher()

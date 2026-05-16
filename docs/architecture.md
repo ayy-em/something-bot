@@ -141,7 +141,8 @@ Two changes, both small:
    URL with the right OIDC SA.
 
 Issues #24 (tiktok-reminder) and #25 (finco-daily-stats) are the
-first two consumers of this pattern.
+first two consumers of this pattern. As of #24, the registry contains
+the `TikTokReminderJob` (Friday 11:00 Europe/Amsterdam → Irindica).
 
 ## File storage (#20)
 
