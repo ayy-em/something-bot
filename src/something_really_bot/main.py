@@ -19,6 +19,10 @@ from fastapi import Depends, FastAPI, Request
 
 from something_really_bot import __version__
 from something_really_bot.config import Settings, get_settings
+from something_really_bot.features.commands.handler import (
+    HelpCommandHandler,
+    StartCommandHandler,
+)
 from something_really_bot.features.example.handler import PingHandler
 from something_really_bot.features.hello_world.handler import HelloWorldHandler
 from something_really_bot.logging import get_logger
@@ -39,6 +43,8 @@ def build_default_dispatcher() -> Dispatcher:
     the webhook route below.
     """
     dispatcher = Dispatcher()
+    dispatcher.register(StartCommandHandler())
+    dispatcher.register(HelpCommandHandler())
     dispatcher.register(HelloWorldHandler())
     dispatcher.register(PingHandler())
     return dispatcher
