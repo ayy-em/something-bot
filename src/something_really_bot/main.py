@@ -20,9 +20,11 @@ from fastapi import Depends, FastAPI, Request
 from something_really_bot import __version__
 from something_really_bot.config import Settings, get_settings
 from something_really_bot.features.example.handler import PingHandler
+from something_really_bot.features.hello_world.handler import HelloWorldHandler
 from something_really_bot.logging import get_logger
 from something_really_bot.routing.dispatcher import Dispatcher
 from something_really_bot.routing.types import BotContext
+from something_really_bot.telegram.client import get_telegram_client
 from something_really_bot.telegram.parser import MalformedUpdateError, parse_update
 from something_really_bot.telegram.security import verify_telegram_webhook_secret
 
@@ -37,6 +39,7 @@ def build_default_dispatcher() -> Dispatcher:
     the webhook route below.
     """
     dispatcher = Dispatcher()
+    dispatcher.register(HelloWorldHandler())
     dispatcher.register(PingHandler())
     return dispatcher
 
@@ -80,7 +83,7 @@ async def webhook(
     :func:`verify_telegram_webhook_secret`.
     """
     raw = await _safe_json(request)
-    ctx = BotContext(settings=settings)
+    ctx = BotContext(settings=settings, telegram_client=get_telegram_client())
 
     try:
         parsed = parse_update(raw)

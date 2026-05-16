@@ -5,17 +5,23 @@ config the app needs. Construction happens at startup via ``get_settings``;
 required values that are missing raise :class:`pydantic.ValidationError` so
 the service fails fast instead of starting in a half-configured state
 (SPEC §9).
-
-Only ``TELEGRAM_WEBHOOK_SECRET`` is currently required. Other fields are
-declared ahead of the issues that wire them up so the shape is stable and
-future commits add behaviour, not config knobs.
 """
 
+import json
 from functools import lru_cache
 from typing import Annotated, Any
 
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+
+from something_really_bot.logging import get_logger
+
+_logger = get_logger(__name__)
+
+# Keys inside the ``telegram-qa-users`` JSON secret whose values are
+# *authorized QA Telegram user IDs*. Other keys in that secret (chat/group/
+# channel targets used by legacy cron jobs) must NOT be allowlisted.
+QA_USER_ID_KEYS: tuple[str, ...] = ("JM_TG_ID", "IRINDICA_CHAT_ID")
 
 
 class Settings(BaseSettings):
@@ -35,13 +41,18 @@ class Settings(BaseSettings):
     telegram_webhook_secret: SecretStr = Field(
         description="Shared secret echoed by Telegram in X-Telegram-Bot-Api-Secret-Token."
     )
-    telegram_bot_token: SecretStr | None = Field(
-        default=None,
-        description="Telegram bot token; wired up alongside the send-message client in #15.",
+    telegram_bot_token: SecretStr = Field(
+        description="Telegram bot token used by TelegramClient.send_message."
     )
-    telegram_qa_user_ids: Annotated[list[int], NoDecode] = Field(
-        default_factory=list,
-        description="Allowlisted Telegram user IDs; populated when #15 lands.",
+    telegram_qa_user_ids: Annotated[frozenset[int], NoDecode] = Field(
+        default_factory=frozenset,
+        validation_alias="TELEGRAM_QA_USERS",
+        description=(
+            "Authorized QA user IDs, parsed from the telegram-qa-users JSON "
+            "secret. Only the JM_TG_ID and IRINDICA_CHAT_ID keys are extracted; "
+            "other keys in that secret (group/channel chat IDs) are intentionally "
+            "ignored — they are routing targets, not QA users."
+        ),
     )
 
     # --- OpenAI / future feature secrets ---
@@ -56,11 +67,30 @@ class Settings(BaseSettings):
 
     @field_validator("telegram_qa_user_ids", mode="before")
     @classmethod
-    def _split_comma_separated(cls, raw: Any) -> Any:
-        """Allow ``TELEGRAM_QA_USER_IDS=123,456`` in env files / Cloud Run env."""
-        if isinstance(raw, str):
-            return [int(part.strip()) for part in raw.split(",") if part.strip()]
-        return raw
+    def _parse_qa_users(cls, raw: Any) -> Any:
+        if not isinstance(raw, str):
+            return raw
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError:
+            _logger.warning("telegram_qa_users_malformed_json")
+            return frozenset()
+        if not isinstance(payload, dict):
+            _logger.warning(
+                "telegram_qa_users_not_a_dict", extra={"actual_type": type(payload).__name__}
+            )
+            return frozenset()
+
+        ids: set[int] = set()
+        for key in QA_USER_ID_KEYS:
+            if key not in payload:
+                _logger.warning("telegram_qa_users_missing_key", extra={"key": key})
+                continue
+            try:
+                ids.add(int(payload[key]))
+            except (TypeError, ValueError):
+                _logger.warning("telegram_qa_users_unparseable_value", extra={"key": key})
+        return frozenset(ids)
 
 
 @lru_cache(maxsize=1)
@@ -70,8 +100,5 @@ def get_settings() -> Settings:
     Cached so dependency injection across many requests doesn't re-parse the
     environment. Tests that need a fresh instance can call
     ``get_settings.cache_clear()``.
-
-    Returns:
-        The application settings.
     """
     return Settings()
