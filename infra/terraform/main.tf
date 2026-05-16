@@ -212,6 +212,33 @@ resource "google_secret_manager_secret_iam_member" "cloudrun_openai" {
 }
 
 # --------------------------------------------------------------------------- #
+# Secret access for the deployer service account
+#
+# The deployer SA runs operational GitHub Actions workflows via WIF. The
+# "Set Telegram webhook" workflow needs to read the bot token and webhook
+# secret to call Telegram's setWebhook from the runner — least-privilege
+# binding on exactly those two secrets per bot, not the OpenAI key.
+# --------------------------------------------------------------------------- #
+
+resource "google_secret_manager_secret_iam_member" "deployer_bot_token" {
+  for_each = var.bots
+
+  project   = var.project_id
+  secret_id = data.google_secret_manager_secret.telegram_bot_token[each.key].secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.deployer.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "deployer_webhook_secret" {
+  for_each = var.bots
+
+  project   = var.project_id
+  secret_id = google_secret_manager_secret.telegram_webhook_secret[each.key].secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.deployer.email}"
+}
+
+# --------------------------------------------------------------------------- #
 # GCS bucket access for the Cloud Run runtime service account
 # --------------------------------------------------------------------------- #
 
