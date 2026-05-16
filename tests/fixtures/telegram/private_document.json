@@ -1,0 +1,26 @@
+{
+  "update_id": 100000005,
+  "message": {
+    "message_id": 15,
+    "date": 1715850004,
+    "chat": {
+      "id": 135499785,
+      "type": "private",
+      "first_name": "Test",
+      "username": "test_user"
+    },
+    "from": {
+      "id": 135499785,
+      "is_bot": false,
+      "first_name": "Test",
+      "username": "test_user"
+    },
+    "document": {
+      "file_id": "BQACAgIAAxkBAA-doc",
+      "file_unique_id": "AgADuDocUnique",
+      "file_name": "report.pdf",
+      "mime_type": "application/pdf",
+      "file_size": 12345
+    }
+  }
+}

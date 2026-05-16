@@ -1,0 +1,19 @@
+{
+  "update_id": 100000007,
+  "message": {
+    "message_id": 17,
+    "date": 1715850006,
+    "chat": {
+      "id": -751519857,
+      "type": "group",
+      "title": "Test group chat"
+    },
+    "from": {
+      "id": 135499785,
+      "is_bot": false,
+      "first_name": "Test",
+      "username": "test_user"
+    },
+    "text": "hi everyone"
+  }
+}

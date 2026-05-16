@@ -1,0 +1,21 @@
+{
+  "update_id": 100000001,
+  "message": {
+    "message_id": 11,
+    "date": 1715850000,
+    "chat": {
+      "id": 135499785,
+      "type": "private",
+      "first_name": "Test",
+      "username": "test_user"
+    },
+    "from": {
+      "id": 135499785,
+      "is_bot": false,
+      "first_name": "Test",
+      "username": "test_user",
+      "language_code": "en"
+    },
+    "text": "hello world"
+  }
+}

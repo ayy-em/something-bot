@@ -1,0 +1,43 @@
+{
+  "update_id": 100000004,
+  "message": {
+    "message_id": 14,
+    "date": 1715850003,
+    "chat": {
+      "id": 135499785,
+      "type": "private",
+      "first_name": "Test",
+      "username": "test_user"
+    },
+    "from": {
+      "id": 135499785,
+      "is_bot": false,
+      "first_name": "Test",
+      "username": "test_user"
+    },
+    "photo": [
+      {
+        "file_id": "AgACAgIAAxkBAA-1",
+        "file_unique_id": "AQADu",
+        "width": 90,
+        "height": 90,
+        "file_size": 1500
+      },
+      {
+        "file_id": "AgACAgIAAxkBAA-2",
+        "file_unique_id": "AQADu2",
+        "width": 320,
+        "height": 320,
+        "file_size": 15000
+      },
+      {
+        "file_id": "AgACAgIAAxkBAA-3",
+        "file_unique_id": "AQADu3",
+        "width": 1280,
+        "height": 1280,
+        "file_size": 250000
+      }
+    ],
+    "caption": "look at this"
+  }
+}

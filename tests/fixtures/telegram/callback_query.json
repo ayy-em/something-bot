@@ -1,0 +1,13 @@
+{
+  "update_id": 100000011,
+  "callback_query": {
+    "id": "cb-12345",
+    "from": {
+      "id": 135499785,
+      "is_bot": false,
+      "first_name": "Test"
+    },
+    "chat_instance": "abcdef",
+    "data": "vote:yes"
+  }
+}

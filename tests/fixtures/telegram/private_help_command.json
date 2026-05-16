@@ -1,0 +1,27 @@
+{
+  "update_id": 100000003,
+  "message": {
+    "message_id": 13,
+    "date": 1715850002,
+    "chat": {
+      "id": 135499785,
+      "type": "private",
+      "first_name": "Test",
+      "username": "test_user"
+    },
+    "from": {
+      "id": 135499785,
+      "is_bot": false,
+      "first_name": "Test",
+      "username": "test_user"
+    },
+    "text": "/help me please",
+    "entities": [
+      {
+        "type": "bot_command",
+        "offset": 0,
+        "length": 5
+      }
+    ]
+  }
+}

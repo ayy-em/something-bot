@@ -1,0 +1,10 @@
+{
+  "message": {
+    "message_id": 99,
+    "chat": {
+      "id": 1,
+      "type": "private"
+    },
+    "text": "no update_id"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "update_id": 100000008,
+  "message": {
+    "message_id": 18,
+    "date": 1715850007,
+    "chat": {
+      "id": -1001134589579,
+      "type": "supergroup",
+      "title": "Test supergroup"
+    },
+    "from": {
+      "id": 135499785,
+      "is_bot": false,
+      "first_name": "Test",
+      "username": "test_user"
+    },
+    "text": "supergroup ping"
+  }
+}

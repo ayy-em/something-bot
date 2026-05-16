@@ -1,0 +1,26 @@
+{
+  "update_id": 100000012,
+  "message": {
+    "message_id": 20,
+    "date": 1715850009,
+    "chat": {
+      "id": -751519857,
+      "type": "group",
+      "title": "Test group chat"
+    },
+    "from": {
+      "id": 135499785,
+      "is_bot": false,
+      "first_name": "Test",
+      "username": "test_user"
+    },
+    "text": "/help@SomethingReallyBot please",
+    "entities": [
+      {
+        "type": "bot_command",
+        "offset": 0,
+        "length": 24
+      }
+    ]
+  }
+}

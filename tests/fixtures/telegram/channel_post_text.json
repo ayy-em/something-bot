@@ -1,0 +1,13 @@
+{
+  "update_id": 100000009,
+  "channel_post": {
+    "message_id": 19,
+    "date": 1715850008,
+    "chat": {
+      "id": -1001626784462,
+      "type": "channel",
+      "title": "Test channel"
+    },
+    "text": "broadcast text"
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "update_id": 100000006,
+  "message": {
+    "message_id": 16,
+    "date": 1715850005,
+    "chat": {
+      "id": 135499785,
+      "type": "private",
+      "first_name": "Test",
+      "username": "test_user"
+    },
+    "from": {
+      "id": 135499785,
+      "is_bot": false,
+      "first_name": "Test",
+      "username": "test_user"
+    },
+    "voice": {
+      "file_id": "AwACAgIAAxkBAA-voice",
+      "file_unique_id": "AgADuVoiceUnique",
+      "duration": 7,
+      "mime_type": "audio/ogg",
+      "file_size": 4321
+    }
+  }
+}
