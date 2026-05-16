@@ -23,10 +23,31 @@ jobs:
   checks:
     uses: ./.github/workflows/_checks.yml
 
+  preflight:
+    name: Deploy preflight (secrets configured?)
+    runs-on: ubuntu-latest
+    needs: checks
+    outputs:
+      enabled: ${{ steps.check.outputs.enabled }}
+    steps:
+      - name: Check that GCP WIF secrets are set
+        id: check
+        env:
+          WIF_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          DEPLOYER_SA: ${{ secrets.GCP_DEPLOYER_SERVICE_ACCOUNT }}
+        run: |
+          if [ -n "${WIF_PROVIDER}" ] && [ -n "${DEPLOYER_SA}" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Deploy skipped: GCP_WORKLOAD_IDENTITY_PROVIDER and/or GCP_DEPLOYER_SERVICE_ACCOUNT are unset. Complete the manual bootstrap from infra/terraform/README.md and set both repo secrets to enable Cloud Run deploys."
+          fi
+
   deploy:
     name: Build, push, deploy
     runs-on: ubuntu-latest
-    needs: checks
+    needs: preflight
+    if: needs.preflight.outputs.enabled == 'true'
     permissions:
       contents: read
       id-token: write
