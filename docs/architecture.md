@@ -4,15 +4,24 @@
 > state lives in [`SPEC.md`](../SPEC.md); this document describes what is
 > *implemented* in the repo right now.
 
-## Current state (issue #7 — skeleton)
+## Current state
 
-Only the Python project skeleton exists:
+What exists in the repo today:
 
-- FastAPI shell at `src/something_really_bot/main.py` exposing `GET /healthz`.
+- FastAPI shell at `src/something_really_bot/main.py` exposing `GET /healthz`
+  (returns `{"status": "healthy"}`) and `POST /webhook` (hello-world; returns
+  `{"status": "ok"}` for any payload, no validation yet).
 - Empty package stubs for the layers below.
-- One smoke test, Dockerfile, README, ruff/pytest config.
+- A handful of smoke tests, Dockerfile, README, ruff/pytest config.
+- Full Terraform foundation under `infra/terraform/` for the GCP side.
+- GitHub Actions CI + OIDC-authenticated deploy workflow under
+  `.github/workflows/`.
 
-No Telegram, BigQuery, GCS, Secret Manager, or routing logic yet.
+No Telegram secret-header validation, parsing, routing, persistence, or
+business logic yet. The legacy Python 3.9 / Flask / App Engine code has
+been removed (#11) — anything that was in `channel/`, `fc/`, `reminders/`,
+`stuff_for_ira/`, `utils/`, or `main.py` is in git history if needed for
+migration reference.
 
 ## Layer boundaries (target)
 

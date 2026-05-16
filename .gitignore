@@ -1,5 +1,4 @@
 # Google Cloud
-app.yaml
 creds/*
 *.json
 

@@ -16,17 +16,8 @@ __pycache__
 tests
 docs
 
-# legacy app engine remnants (removed in #11)
-app.yaml
-cron.yaml
-main.py
-requirements.txt
-.gcloudignore
-channel
-fc
-reminders
-stuff_for_ira
-utils
+# infra and CI tooling
+infra
 
 # tooling
 .claude

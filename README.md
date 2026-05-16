@@ -8,10 +8,12 @@ Mid-rebuild. The bot is being re-implemented from scratch as a Python 3.12 /
 FastAPI service running on Google Cloud Run. The authoritative target state is
 [`SPEC.md`](./SPEC.md); incremental progress is tracked via GitHub issues.
 
-Legacy Python 3.9 / Flask / App Engine code still lives at the repo root for
-reference and is removed in issue #11.
+The legacy Python 3.9 / Flask / App Engine implementation has been removed;
+references to specific legacy features live in the migration issues
+(#21–#27). Anything not yet re-implemented is broken on the live bot until
+the corresponding feature issue lands.
 
-## Tech stack (target)
+## Tech stack
 
 - Python 3.12
 - FastAPI + Uvicorn

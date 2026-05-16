@@ -29,16 +29,6 @@ packages = ["src/something_really_bot"]
 line-length = 100
 target-version = "py312"
 src = ["src", "tests"]
-# Legacy Python 3.9 / App Engine code is reference-only and is removed in #11.
-# Excluded here so format/lint runs do not touch it.
-extend-exclude = [
-    "channel",
-    "fc",
-    "main.py",
-    "reminders",
-    "stuff_for_ira",
-    "utils",
-]
 
 [tool.ruff.lint]
 select = [
