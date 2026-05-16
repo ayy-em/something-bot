@@ -4,29 +4,24 @@ Talk to me at https://t.me/SomethingReallyBot at any time, day and night, baby, 
 
 ## Status
 
-Mid-rebuild. The bot is being re-implemented from scratch as a Python 3.12 /
-FastAPI service running on Google Cloud Run. The authoritative target state is
-[`SPEC.md`](./SPEC.md); incremental progress is tracked via GitHub issues.
+Mid-rebuild. The bot is being re-implemented from scratch as a Python 3.12 / FastAPI service running on Google Cloud Run. The authoritative target state is [`SPEC.md`](./SPEC.md); incremental progress is tracked via GitHub issues.
 
-The legacy Python 3.9 / Flask / App Engine implementation has been removed;
-references to specific legacy features live in the migration issues
-(#21–#27). Anything not yet re-implemented is broken on the live bot until
-the corresponding feature issue lands.
+The legacy Python 3.9 / Flask / App Engine implementation has been removed; references to specific legacy features live in the migration issues (#21–#27). Anything not yet re-implemented is broken on the live bot until the corresponding feature issue lands.
 
 ## Tech stack
 
 - Python 3.12
 - FastAPI + Uvicorn
-- Google Cloud Run (region `europe-west4`)
-- Docker
-- Terraform
-- GitHub Actions CI/CD (OIDC, no long-lived keys)
+- Google Cloud:
+  - Cloud Run (region `europe-west4`) via Docker
+  - Terraform for IaC
+  - GitHub Actions CI/CD (OIDC, no long-lived keys)
+  - Google Cloud Storage for received files
+  - BigQuery for raw + normalized message persistence
+  - Google Secret Manager for secrets
 - [`uv`](https://docs.astral.sh/uv/) for dependency management
 - [`ruff`](https://docs.astral.sh/ruff/) for lint + format
 - [`pytest`](https://docs.pytest.org/) for tests
-- BigQuery for raw + normalized message persistence
-- Google Cloud Storage for received files
-- Google Secret Manager for secrets
 
 ## Local development
 
@@ -50,9 +45,7 @@ reports for `something-really-bot-cloudrun`.
 
 ## Docker
 
-`TELEGRAM_WEBHOOK_SECRET` is required at startup; the app crashes with a
-clear Pydantic `ValidationError` if it's missing. Any value works for
-local smoke tests.
+`TELEGRAM_WEBHOOK_SECRET` is required at startup; the app crashes with a clear Pydantic `ValidationError` if it's missing. Any value works for local smoke tests.
 
 ```bash
 docker build -t something-really-bot:dev .
@@ -77,8 +70,7 @@ curl -X POST http://localhost:8080/webhook -H 'X-Telegram-Bot-Api-Secret-Token: 
 
 ## Layout
 
-See [`docs/architecture.md`](./docs/architecture.md) for the package tree and
-which issue introduces real logic into each layer.
+See [`docs/architecture.md`](./docs/architecture.md) for the package tree and which issue introduces real logic into each layer.
 
 ## CI/CD
 
