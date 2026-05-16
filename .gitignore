@@ -27,7 +27,7 @@ CLAUDE.md
 # Virtual environments
 venv/
 .venv/
-uv.lock
+# uv.lock is intentionally committed
 
 # sensitive files
 .env

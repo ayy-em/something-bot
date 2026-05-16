@@ -1,0 +1,38 @@
+.git
+.github
+.gitignore
+.dockerignore
+.python-version
+.env
+.env.example
+.venv
+.ruff_cache
+.pytest_cache
+__pycache__
+*.pyc
+*.pyo
+
+# tests and docs are not needed at runtime
+tests
+docs
+
+# legacy app engine remnants (removed in #11)
+app.yaml
+cron.yaml
+main.py
+requirements.txt
+.gcloudignore
+channel
+fc
+reminders
+stuff_for_ira
+utils
+
+# tooling
+.claude
+.cursor
+.vscode
+.idea
+CLAUDE.md
+SPEC.md
+# README.md is required at build time by hatchling (pyproject.toml `readme = ...`)

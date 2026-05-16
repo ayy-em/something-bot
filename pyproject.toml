@@ -1,0 +1,60 @@
+[project]
+name = "something-really-bot"
+version = "0.1.0"
+description = "Something Dashboard Telegram bot, rebuilt for Cloud Run."
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+license = { text = "Proprietary" }
+authors = [{ name = "STX Group" }]
+dependencies = [
+    "fastapi>=0.115,<0.116",
+    "uvicorn[standard]>=0.32,<0.33",
+]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.27,<0.28",
+    "pytest>=8.3,<9",
+    "ruff>=0.7,<0.8",
+]
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/something_really_bot"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+# Legacy Python 3.9 / App Engine code is reference-only and is removed in #11.
+# Excluded here so format/lint runs do not touch it.
+extend-exclude = [
+    "channel",
+    "fc",
+    "main.py",
+    "reminders",
+    "stuff_for_ira",
+    "utils",
+]
+
+[tool.ruff.lint]
+select = [
+    "B",   # flake8-bugbear
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # isort
+    "SIM", # flake8-simplify
+    "UP",  # pyupgrade
+    "W",   # pycodestyle warnings
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["B011"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+addopts = "-ra"
