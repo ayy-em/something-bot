@@ -1,13 +1,11 @@
-"""Smoke tests for the FastAPI app shell.
-
-Covers the two endpoints that exist before any business logic lands:
-``GET /healthz`` (Cloud Run liveness probe) and ``POST /webhook`` (hello-world
-Telegram target).
-"""
+"""Smoke tests for the FastAPI app shell and Telegram webhook auth."""
 
 from fastapi.testclient import TestClient
 
 from something_really_bot.main import app
+from something_really_bot.telegram.security import TELEGRAM_SECRET_HEADER
+
+WEBHOOK_SECRET = "test-secret"
 
 client = TestClient(app)
 
@@ -20,26 +18,53 @@ def test_healthz_returns_healthy() -> None:
     assert response.json() == {"status": "healthy"}
 
 
-def test_webhook_post_returns_ok_for_arbitrary_json() -> None:
-    """``POST /webhook`` returns 200 + ``{"status": "ok"}`` for any JSON body."""
-    payload = {"update_id": 42, "message": {"text": "hello"}}
+def test_webhook_returns_ok_when_secret_header_matches() -> None:
+    """``POST /webhook`` with the correct secret header returns 200."""
+    response = client.post(
+        "/webhook",
+        json={"update_id": 42, "message": {"text": "hello"}},
+        headers={TELEGRAM_SECRET_HEADER: WEBHOOK_SECRET},
+    )
 
-    response = client.post("/webhook", json=payload)
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+
+def test_webhook_accepts_empty_body_with_correct_secret() -> None:
+    """An empty JSON body is still accepted when the header matches."""
+    response = client.post(
+        "/webhook",
+        content=b"",
+        headers={
+            "content-type": "application/json",
+            TELEGRAM_SECRET_HEADER: WEBHOOK_SECRET,
+        },
+    )
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
 
 
-def test_webhook_post_returns_ok_for_empty_body() -> None:
-    """``POST /webhook`` still returns 200 + ok when the body is empty."""
-    response = client.post("/webhook", content=b"", headers={"content-type": "application/json"})
+def test_webhook_rejects_missing_secret_header_with_401() -> None:
+    """A request without the secret header is rejected as Unauthorized."""
+    response = client.post("/webhook", json={})
 
-    assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    assert response.status_code == 401
+
+
+def test_webhook_rejects_wrong_secret_header_with_403() -> None:
+    """A request with the wrong secret value is rejected as Forbidden."""
+    response = client.post(
+        "/webhook",
+        json={},
+        headers={TELEGRAM_SECRET_HEADER: "not-the-secret"},
+    )
+
+    assert response.status_code == 403
 
 
 def test_webhook_rejects_get_with_405() -> None:
-    """``GET /webhook`` is not allowed; FastAPI returns 405 Method Not Allowed."""
+    """``GET /webhook`` is not allowed."""
     response = client.get("/webhook")
 
     assert response.status_code == 405

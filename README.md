@@ -50,11 +50,29 @@ reports for `something-really-bot-cloudrun`.
 
 ## Docker
 
+`TELEGRAM_WEBHOOK_SECRET` is required at startup; the app crashes with a
+clear Pydantic `ValidationError` if it's missing. Any value works for
+local smoke tests.
+
 ```bash
 docker build -t something-really-bot:dev .
-docker run --rm -p 8080:8080 -e PORT=8080 something-really-bot:dev
+docker run --rm -p 8080:8080 \
+  -e PORT=8080 \
+  -e TELEGRAM_WEBHOOK_SECRET=local-dev-secret \
+  something-really-bot:dev
+
+# Liveness probe (no header needed):
 curl http://localhost:8080/healthz                                          # -> {"status":"healthy"}
-curl -X POST http://localhost:8080/webhook -H 'content-type: application/json' -d '{}'  # -> {"status":"ok"}
+
+# Webhook with correct secret:
+curl -X POST http://localhost:8080/webhook \
+  -H 'content-type: application/json' \
+  -H 'X-Telegram-Bot-Api-Secret-Token: local-dev-secret' \
+  -d '{}'                                                                   # -> 200 {"status":"ok"}
+
+# Without the header / with wrong header:
+curl -X POST http://localhost:8080/webhook -d '{}'                          # -> 401
+curl -X POST http://localhost:8080/webhook -H 'X-Telegram-Bot-Api-Secret-Token: nope' -d '{}'  # -> 403
 ```
 
 ## Layout

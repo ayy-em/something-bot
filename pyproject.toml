@@ -8,6 +8,7 @@ license = { text = "Proprietary" }
 authors = [{ name = "STX Group" }]
 dependencies = [
     "fastapi>=0.115,<0.116",
+    "pydantic-settings>=2.6,<3",
     "uvicorn[standard]>=0.32,<0.33",
 ]
 
