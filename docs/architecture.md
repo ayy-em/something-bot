@@ -48,7 +48,7 @@ ahead of implementation. Each layer is replaced as its issue lands.
 | Telegram client + parser | `telegram/` | #12, #13 |
 | Routing / dispatcher | `routing/` | #14 |
 | Feature handlers | `features/` | #15, #16, #20, #23 … |
-| BigQuery persistence | `persistence/` | #17 (RFC), #18 |
+| BigQuery persistence | `persistence/` | #17 (RFC — [0001-bigquery-schema](decisions/0001-bigquery-schema.md)), #18 |
 | GCS file storage | `file_storage/` | #20 |
 | Cross-feature services | `services/` | as needed |
 | Config / secrets | `config.py` | #12 onward |
@@ -58,6 +58,15 @@ ahead of implementation. Each layer is replaced as its issue lands.
 
 Terraform-managed Cloud Run deployment lands in #8. CI/CD via GitHub Actions
 OIDC lands in #9. Until then, the Dockerfile alone proves the image builds.
+
+## Persistence
+
+BigQuery dataset `something_bot` (location `EU`) holds five tables:
+`telegram_updates_raw`, `telegram_messages`, `telegram_files`,
+`bot_responses`, `processing_events`. Time-partitioned by event date,
+clustered by `bot_id` + the most-selective discriminator per table. Full
+column list and migration policy: [decisions/0001-bigquery-schema.md](decisions/0001-bigquery-schema.md).
+Terraform resources + the persistence service land in #18.
 
 ## Conventions
 
