@@ -8,20 +8,33 @@
 
 What exists in the repo today:
 
-- FastAPI shell at `src/something_really_bot/main.py` exposing `GET /healthz`
-  (returns `{"status": "healthy"}`) and `POST /webhook` (hello-world; returns
-  `{"status": "ok"}` for any payload, no validation yet).
-- Empty package stubs for the layers below.
-- A handful of smoke tests, Dockerfile, README, ruff/pytest config.
+- FastAPI app at `src/something_really_bot/main.py`:
+  - `GET /healthz` returns `{"status": "healthy"}` for Cloud Run probes.
+  - `POST /webhook` validates the Telegram secret header (#12), parses
+    the body via `telegram.parser.parse_update` (#13), then dispatches
+    to a matching handler via the routing `Dispatcher` (#14). Always
+    acks 200, including on parse failures or handler exceptions.
+- Routing layer (`routing/`): `Dispatcher` class + `Handler` protocol +
+  `BotContext` / `HandlerResult` types. First-match-wins; handler
+  exceptions are captured, not raised. Multi-bot identifier flows through
+  the context.
+- Telegram parser (`telegram/`): typed Pydantic models, two-level
+  discriminated union (chat type → content kind). 14 unsupported update
+  types short-circuit to `UnsupportedUpdate`.
+- Example handler (`features/example/`): `PingHandler` responds `pong` to
+  `/ping`. Will be deleted once real handlers exist.
+- Config (`config.py`): pydantic-settings `Settings` reading env vars.
+  `TELEGRAM_WEBHOOK_SECRET` is the only required field today; others are
+  declared but optional pending their respective issues.
 - Full Terraform foundation under `infra/terraform/` for the GCP side.
 - GitHub Actions CI + OIDC-authenticated deploy workflow under
-  `.github/workflows/`.
+  `.github/workflows/`. The deploy workflow injects
+  `TELEGRAM_WEBHOOK_SECRET` into Cloud Run via Secret Manager.
 
-No Telegram secret-header validation, parsing, routing, persistence, or
-business logic yet. The legacy Python 3.9 / Flask / App Engine code has
-been removed (#11) — anything that was in `channel/`, `fc/`, `reminders/`,
-`stuff_for_ira/`, `utils/`, or `main.py` is in git history if needed for
-migration reference.
+The legacy Python 3.9 / Flask / App Engine code has been removed (#11) —
+anything that was in `channel/`, `fc/`, `reminders/`, `stuff_for_ira/`,
+`utils/`, or `main.py` is in git history if needed for migration
+reference.
 
 ## Layer boundaries (target)
 
