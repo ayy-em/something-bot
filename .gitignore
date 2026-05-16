@@ -17,6 +17,7 @@ wheels/
 # LLMs
 .claude
 CLAUDE.md
+TODO.md
 
 # IDEs
 .cursor/
@@ -42,5 +43,6 @@ inputs/
 outputs/
 past_inputs/
 *.json
+
 # but do track Telegram payload fixtures used by the parser tests
 !tests/fixtures/**/*.json

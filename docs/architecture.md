@@ -9,7 +9,8 @@
 What exists in the repo today:
 
 - FastAPI app at `src/something_really_bot/main.py`:
-  - `GET /healthz` returns `{"status": "healthy"}` for Cloud Run probes.
+  - `GET /health` returns `{"status": "healthy"}` for Cloud Run probes
+    (`/healthz` is reserved by Google Frontend on `*.run.app`).
   - `POST /webhook` validates the Telegram secret header (#12), parses
     the body via `telegram.parser.parse_update` (#13), then dispatches
     to a matching handler via the routing `Dispatcher` (#14). Always

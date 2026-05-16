@@ -1,6 +1,8 @@
 """FastAPI application entrypoint.
 
-``GET /healthz`` is an unauthenticated liveness probe used by Cloud Run.
+``GET /health`` is an unauthenticated liveness probe used by Cloud Run.
+(``/healthz`` is intercepted by Google Frontend on ``*.run.app`` domains
+and never reaches the container, so we use ``/health``.)
 ``POST /webhook`` is the Telegram target: requests must carry the secret
 header validated by :func:`verify_telegram_webhook_secret`; the body is
 parsed into a :class:`ParsedUpdate` and routed to the matching handler via
@@ -59,8 +61,8 @@ app = FastAPI(
 )
 
 
-@app.get("/healthz")
-def healthz() -> dict[str, str]:
+@app.get("/health")
+def health() -> dict[str, str]:
     """Liveness probe used by Cloud Run and local smoke tests."""
     return {"status": "healthy"}
 

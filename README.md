@@ -36,7 +36,7 @@ uv run uvicorn something_really_bot.main:app --reload   # serve locally on :8000
 
 The FastAPI shell currently exposes two routes:
 
-- `GET /healthz` → `{"status": "healthy"}` (Cloud Run liveness probe).
+- `GET /health` → `{"status": "healthy"}` (Cloud Run liveness probe; `/healthz` is reserved by Google Frontend on `*.run.app`).
 - `POST /webhook` → `{"status": "ok"}` (hello-world; accepts any payload, no
   validation — Telegram secret-header check + parsing land in #12 / #13).
 
@@ -55,7 +55,7 @@ docker run --rm -p 8080:8080 \
   something-really-bot:dev
 
 # Liveness probe (no header needed):
-curl http://localhost:8080/healthz                                          # -> {"status":"healthy"}
+curl http://localhost:8080/health                                           # -> {"status":"healthy"}
 
 # Webhook with correct secret:
 curl -X POST http://localhost:8080/webhook \
