@@ -37,16 +37,22 @@ uv run ruff format --check    # CI-friendly format check
 uv run uvicorn something_really_bot.main:app --reload   # serve locally on :8000
 ```
 
-The FastAPI shell currently exposes one route: `GET /healthz` → `{"status": "ok"}`.
-Business logic (Telegram webhook, routing, BigQuery, GCS) is introduced in
-subsequent issues.
+The FastAPI shell currently exposes two routes:
+
+- `GET /healthz` → `{"status": "healthy"}` (Cloud Run liveness probe).
+- `POST /webhook` → `{"status": "ok"}` (hello-world; accepts any payload, no
+  validation — Telegram secret-header check + parsing land in #12 / #13).
+
+The deployed Cloud Run URL is whatever `gcloud run services list --region=europe-west4`
+reports for `something-really-bot-cloudrun`.
 
 ## Docker
 
 ```bash
 docker build -t something-really-bot:dev .
 docker run --rm -p 8080:8080 -e PORT=8080 something-really-bot:dev
-curl http://localhost:8080/healthz   # -> {"status":"ok"}
+curl http://localhost:8080/healthz                                          # -> {"status":"healthy"}
+curl -X POST http://localhost:8080/webhook -H 'content-type: application/json' -d '{}'  # -> {"status":"ok"}
 ```
 
 ## Layout
