@@ -8,6 +8,7 @@ license = { text = "Proprietary" }
 authors = [{ name = "STX Group" }]
 dependencies = [
     "fastapi>=0.136,<0.137",
+    "google-auth>=2.30,<3",
     "google-cloud-bigquery>=3.41,<4",
     "google-cloud-storage>=3.10,<4",
     "httpx>=0.28,<0.29",

@@ -94,6 +94,32 @@ Per request, `POST /webhook` runs:
 6. Errored or unhandled outcomes emit a `processing_events` row.
 7. Return `200 {"status": "ok"}`.
 
+## Scheduled jobs (#22)
+
+Cron-style jobs run via Cloud Scheduler hitting `POST /jobs/{name}` on
+Cloud Run. The route is OIDC-protected:
+`services/scheduler_auth.py` verifies that the incoming `Authorization:
+Bearer <jwt>` token is a Google-issued OIDC token whose `email` claim
+matches `Settings.scheduler_service_account_email`. Anything else is
+401/403. App-level enforcement is the trust anchor because the service
+itself is publicly invocable (Telegram webhook needs unauth POST).
+
+### Adding a new scheduled job
+
+Two changes, both small:
+
+1. **Python.** Implement a class that satisfies
+   `services.jobs.JobHandler` and register it on the module-level
+   `job_registry` in `main.py` (or via `build_default_job_registry`).
+2. **Terraform.** Add one entry to `local.scheduled_jobs` in
+   `infra/terraform/scheduler.tf` with `schedule`, `timezone`,
+   `target_path`, and `description`. `terraform apply` creates the
+   `google_cloud_scheduler_job` and points it at the right Cloud Run
+   URL with the right OIDC SA.
+
+Issues #24 (tiktok-reminder) and #25 (finco-daily-stats) are the
+first two consumers of this pattern.
+
 ## File storage (#20)
 
 Private-chat photo / document / voice uploads are mirrored into GCS bucket

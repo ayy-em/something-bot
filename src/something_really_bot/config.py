@@ -71,6 +71,15 @@ class Settings(BaseSettings):
         description="GCS bucket for Telegram-uploaded files (RFC #19 / decision 0002).",
     )
 
+    # --- Cloud Scheduler (#22) ---
+    scheduler_service_account_email: str | None = Field(
+        default=None,
+        description=(
+            "OIDC token issuer for incoming /jobs/<name> calls. Required for the "
+            "scheduled-jobs endpoint to accept requests; if unset, /jobs/* always 401."
+        ),
+    )
+
     @field_validator("telegram_qa_user_ids", mode="before")
     @classmethod
     def _parse_qa_users(cls, raw: Any) -> Any:

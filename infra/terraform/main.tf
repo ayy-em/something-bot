@@ -1,8 +1,10 @@
 locals {
   required_apis = [
     "artifactregistry.googleapis.com",
+    "bigquery.googleapis.com",
     "cloudbilling.googleapis.com",
     "cloudresourcemanager.googleapis.com",
+    "cloudscheduler.googleapis.com",
     "iam.googleapis.com",
     "iamcredentials.googleapis.com",
     "run.googleapis.com",

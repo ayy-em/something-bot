@@ -657,6 +657,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
+    { name = "google-auth" },
     { name = "google-cloud-bigquery" },
     { name = "google-cloud-storage" },
     { name = "httpx" },
@@ -674,6 +675,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.136,<0.137" },
+    { name = "google-auth", specifier = ">=2.30,<3" },
     { name = "google-cloud-bigquery", specifier = ">=3.41,<4" },
     { name = "google-cloud-storage", specifier = ">=3.10,<4" },
     { name = "httpx", specifier = ">=0.28,<0.29" },

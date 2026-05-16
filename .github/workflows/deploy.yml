@@ -109,6 +109,7 @@ jobs:
             --image="${{ steps.image.outputs.sha_tag }}" \
             --service-account="${RUNTIME_SA}" \
             --set-secrets="TELEGRAM_WEBHOOK_SECRET=telegram-webhook-secret-default:latest,TELEGRAM_BOT_TOKEN=telegram-bot-token-default:latest,TELEGRAM_QA_USERS=telegram-qa-users:latest" \
+            --set-env-vars="SCHEDULER_SERVICE_ACCOUNT_EMAIL=something-bot-scheduler-sa@${PROJECT_ID}.iam.gserviceaccount.com" \
             --quiet
 
       - name: Print deployed revision URL

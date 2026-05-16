@@ -44,6 +44,8 @@ from something_really_bot.persistence import (
 from something_really_bot.persistence.bigquery import get_persistence_service
 from something_really_bot.routing.dispatcher import Dispatcher
 from something_really_bot.routing.types import BotContext, HandlerResult
+from something_really_bot.services.jobs import JobRegistry, UnknownJobError
+from something_really_bot.services.scheduler_auth import verify_scheduler_oidc_token
 from something_really_bot.telegram.client import get_telegram_client
 from something_really_bot.telegram.models import (
     ChannelPost,
@@ -75,7 +77,18 @@ def build_default_dispatcher() -> Dispatcher:
     return dispatcher
 
 
+def build_default_job_registry() -> JobRegistry:
+    """Construct the production scheduled-job registry.
+
+    #24 (tiktok-reminder) and #25 (finco-daily-stats) register their job
+    handlers here when they land. The matching Cloud Scheduler entries are
+    added to ``infra/terraform/scheduler.tf``.
+    """
+    return JobRegistry()
+
+
 dispatcher: Dispatcher = build_default_dispatcher()
+job_registry: JobRegistry = build_default_job_registry()
 
 
 @asynccontextmanager
@@ -99,6 +112,33 @@ app = FastAPI(
 def health() -> dict[str, str]:
     """Liveness probe used by Cloud Run and local smoke tests."""
     return {"status": "healthy"}
+
+
+@app.post(
+    "/jobs/{job_name}",
+    dependencies=[Depends(verify_scheduler_oidc_token)],
+)
+async def run_scheduled_job(
+    job_name: str,
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> dict[str, str]:
+    """Cloud Scheduler entry point. OIDC-verified by the dependency above."""
+    ctx = BotContext(
+        settings=settings,
+        telegram_client=get_telegram_client(),
+        persistence=get_persistence_service(),
+        file_fetcher=get_file_fetcher(),
+    )
+    try:
+        await job_registry.dispatch(job_name, ctx)
+    except UnknownJobError:
+        from fastapi import HTTPException, status
+
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No such job: {job_name!r}",
+        ) from None
+    return {"status": "ok", "job": job_name}
 
 
 @app.post("/webhook", dependencies=[Depends(verify_telegram_webhook_secret)])
