@@ -31,6 +31,7 @@ from something_really_bot.features.commands.handler import (
 from something_really_bot.features.example.handler import PingHandler
 from something_really_bot.features.file_storage.handler import FileStorageHandler
 from something_really_bot.features.hello_world.handler import HelloWorldHandler
+from something_really_bot.features.openai_fallback.handler import OpenAIFallbackHandler
 from something_really_bot.file_storage.fetcher import get_file_fetcher
 from something_really_bot.logging import get_logger
 from something_really_bot.persistence import (
@@ -45,6 +46,7 @@ from something_really_bot.persistence.bigquery import get_persistence_service
 from something_really_bot.routing.dispatcher import Dispatcher
 from something_really_bot.routing.types import BotContext, HandlerResult
 from something_really_bot.services.jobs import JobRegistry, UnknownJobError
+from something_really_bot.services.openai_client import get_openai_client
 from something_really_bot.services.scheduler_auth import verify_scheduler_oidc_token
 from something_really_bot.telegram.client import get_telegram_client
 from something_really_bot.telegram.models import (
@@ -72,7 +74,8 @@ def build_default_dispatcher() -> Dispatcher:
     dispatcher.register(StartCommandHandler())
     dispatcher.register(HelpCommandHandler())
     dispatcher.register(FileStorageHandler())
-    dispatcher.register(HelloWorldHandler())
+    dispatcher.register(HelloWorldHandler())  # gated by settings.hello_world_mode
+    dispatcher.register(OpenAIFallbackHandler())
     dispatcher.register(PingHandler())
     return dispatcher
 
@@ -128,6 +131,7 @@ async def run_scheduled_job(
         telegram_client=get_telegram_client(),
         persistence=get_persistence_service(),
         file_fetcher=get_file_fetcher(),
+        openai_client=get_openai_client(),
     )
     try:
         await job_registry.dispatch(job_name, ctx)
@@ -154,6 +158,7 @@ async def webhook(
         telegram_client=get_telegram_client(),
         persistence=get_persistence_service(),
         file_fetcher=get_file_fetcher(),
+        openai_client=get_openai_client(),
     )
 
     try:

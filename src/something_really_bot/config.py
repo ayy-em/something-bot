@@ -55,10 +55,27 @@ class Settings(BaseSettings):
         ),
     )
 
-    # --- OpenAI / future feature secrets ---
+    # --- OpenAI (#23) ---
     openai_api_key: SecretStr | None = Field(
         default=None,
-        description="Wired up by the OpenAI fallback handler in #23.",
+        description=(
+            "OpenAI API key used by the fallback chat handler (#23). When "
+            "unset, OpenAIFallbackHandler replies with a deterministic "
+            "apology message instead of calling the API."
+        ),
+    )
+    openai_model: str = Field(
+        default="gpt-4o-mini",
+        description="OpenAI chat model used by the fallback handler.",
+    )
+
+    # --- Feature flags ---
+    hello_world_mode: bool = Field(
+        default=False,
+        description=(
+            "When True, the Hello World/parrot handler from #15 supersedes the "
+            "OpenAI fallback for QA private text. Default False — OpenAI wins."
+        ),
     )
 
     # --- BigQuery / GCS (#18, #20) ---

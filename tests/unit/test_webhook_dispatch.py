@@ -68,7 +68,7 @@ def _photo_payload() -> dict[str, Any]:
 
 def test_ping_payload_dispatches_handler_sends_reply_and_persists(stub_external_services) -> None:
     """/ping → PingHandler matches → reply sent + raw/message/response rows persisted."""
-    tg, persistence, _fetcher = stub_external_services
+    tg, persistence, _fetcher, _openai = stub_external_services
 
     response = client.post("/webhook", json=_payload("/ping"), headers=_headers())
 
@@ -96,7 +96,7 @@ def test_ping_payload_dispatches_handler_sends_reply_and_persists(stub_external_
 
 def test_unhandled_payload_persists_event_no_send(stub_external_services) -> None:
     """Text that no handler matches → raw + message rows + update_unhandled event, no send."""
-    tg, persistence, _fetcher = stub_external_services
+    tg, persistence, _fetcher, _openai = stub_external_services
 
     response = client.post("/webhook", json=_payload("totally random text"), headers=_headers())
 
@@ -110,7 +110,7 @@ def test_unhandled_payload_persists_event_no_send(stub_external_services) -> Non
 
 
 def test_photo_payload_persists_file_row_and_schedules_fetch(stub_external_services) -> None:
-    _tg, persistence, fetcher = stub_external_services
+    _tg, persistence, fetcher, _openai = stub_external_services
 
     response = client.post("/webhook", json=_photo_payload(), headers=_headers())
 
@@ -133,7 +133,7 @@ def test_photo_payload_persists_file_row_and_schedules_fetch(stub_external_servi
 
 def test_malformed_payload_records_event_only(stub_external_services) -> None:
     """Missing update_id → parser raises → malformed_update event, nothing else."""
-    _tg, persistence, _fetcher = stub_external_services
+    _tg, persistence, _fetcher, _openai = stub_external_services
 
     response = client.post(
         "/webhook",
@@ -159,7 +159,7 @@ def test_handler_exception_records_error_event_and_returns_200(
     monkeypatch, stub_external_services
 ) -> None:
     """A handler that raises is caught; webhook returns 200 and records the error event."""
-    _tg, persistence, _fetcher = stub_external_services
+    _tg, persistence, _fetcher, _openai = stub_external_services
 
     class _Boom:
         name = "boom"

@@ -28,6 +28,7 @@ class BotContext:
     telegram_client: Any | None = None
     persistence: PersistenceService | None = None
     file_fetcher: FileFetcher | None = None
+    openai_client: Any | None = None
 
 
 @dataclass(frozen=True)

@@ -69,28 +69,49 @@ class RecordingFileFetcher:
         self.scheduled.append(request)
 
 
+class RecordingOpenAIClient:
+    """Stub :class:`OpenAIClient` with a configurable canned response."""
+
+    def __init__(self, reply: str = "Mocked OpenAI response.") -> None:
+        self.calls: list[str] = []
+        self._reply = reply
+
+    async def complete(self, prompt: str) -> str:
+        self.calls.append(prompt)
+        return self._reply
+
+
 @pytest.fixture(autouse=True)
 def stub_external_services(
     monkeypatch: pytest.MonkeyPatch,
-) -> tuple[RecordingTelegramClient, RecordingPersistence, RecordingFileFetcher]:
-    """Replace the webhook's Telegram + persistence + fetcher factories with stubs.
+) -> tuple[
+    RecordingTelegramClient,
+    RecordingPersistence,
+    RecordingFileFetcher,
+    RecordingOpenAIClient,
+]:
+    """Replace the webhook's external-service factories with stubs.
 
     Returns the stubs so individual tests can assert on captured calls.
     """
     from something_really_bot import main as app_main
     from something_really_bot.file_storage import fetcher as file_fetcher_module
     from something_really_bot.persistence import bigquery as bq_persistence
+    from something_really_bot.services import openai_client as openai_module
     from something_really_bot.telegram import client as tg_client
 
     tg = RecordingTelegramClient()
     persistence = RecordingPersistence()
     fetcher = RecordingFileFetcher()
+    openai = RecordingOpenAIClient()
 
     tg_client.get_telegram_client.cache_clear()
     bq_persistence.get_persistence_service.cache_clear()
     file_fetcher_module.get_file_fetcher.cache_clear()
+    openai_module.get_openai_client.cache_clear()
     monkeypatch.setattr(app_main, "get_telegram_client", lambda: tg)
     monkeypatch.setattr(app_main, "get_persistence_service", lambda: persistence)
     monkeypatch.setattr(app_main, "get_file_fetcher", lambda: fetcher)
+    monkeypatch.setattr(app_main, "get_openai_client", lambda: openai)
 
-    return tg, persistence, fetcher
+    return tg, persistence, fetcher, openai

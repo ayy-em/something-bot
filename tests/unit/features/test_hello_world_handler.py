@@ -28,10 +28,13 @@ RANDO_ID = 99999999
 
 
 def _settings(allowlist: frozenset[int]) -> Settings:
+    # hello_world_mode=True so the handler matches; OpenAI fallback (#23)
+    # otherwise supersedes this handler in production.
     return Settings.model_construct(
         telegram_webhook_secret=SecretStr("x"),
         telegram_bot_token=SecretStr("tok"),
         telegram_qa_user_ids=allowlist,
+        hello_world_mode=True,
     )
 
 

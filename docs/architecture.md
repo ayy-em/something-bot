@@ -94,6 +94,29 @@ Per request, `POST /webhook` runs:
 6. Errored or unhandled outcomes emit a `processing_events` row.
 7. Return `200 {"status": "ok"}`.
 
+## OpenAI fallback (#23)
+
+For private text messages from QA users that no other handler claimed,
+`OpenAIFallbackHandler` (`features/openai_fallback/`) calls the OpenAI
+chat completions API and replies with the response. The system prompt
+lives in `services/openai_client.py::SYSTEM_PROMPT` and is intentionally
+short and neutral; persistent conversation context is post-MVP (#26).
+
+Defaults: `gpt-4o-mini`, 25s timeout (the Cloud Run request timeout is
+60s, leaving headroom for the orchestrator's persistence work).
+Failures (timeouts, rate limits, no API key) degrade gracefully — the
+handler returns a deterministic apology reply and sets `HandlerResult.error`
+so the webhook records a `handler_errored` event in `processing_events`.
+
+### Handler precedence
+
+`HelloWorldHandler` (#15) is still registered but is **gated** behind
+`settings.hello_world_mode` (env var `HELLO_WORLD_MODE`, default
+`false`). With the default, HelloWorld silently doesn't match and the
+OpenAI fallback runs. Flipping `HELLO_WORLD_MODE=true` in a Cloud Run
+revision restores the old parrot behaviour — useful as a quick
+degraded-mode escape if the OpenAI API is broken.
+
 ## Scheduled jobs (#22)
 
 Cron-style jobs run via Cloud Scheduler hitting `POST /jobs/{name}` on

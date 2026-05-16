@@ -30,6 +30,10 @@ class HelloWorldHandler:
     name = "hello_world.parrot"
 
     def matches(self, update: ParsedUpdate, ctx: BotContext) -> bool:
+        if not ctx.settings.hello_world_mode:
+            # OpenAI fallback (#23) supersedes this handler unless the
+            # user explicitly enables degraded mode via env flag.
+            return False
         if not isinstance(update, PrivateMessage):
             return False
         if not isinstance(update.content, TextContent):
