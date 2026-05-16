@@ -1,0 +1,19 @@
+# Local Terraform working directories
+.terraform/
+.terraform.tfstate.lock.info
+
+# State files — backed by GCS, never committed
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+
+# Variable files that might contain secrets (none expected, but defensive)
+*.auto.tfvars
+*.auto.tfvars.json
+
+# Crash logs
+crash.log
+crash.*.log
+
+# IDE
+*.tfplan
