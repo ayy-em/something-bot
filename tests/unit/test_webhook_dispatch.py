@@ -68,7 +68,7 @@ def _photo_payload() -> dict[str, Any]:
 
 def test_ping_payload_dispatches_handler_sends_reply_and_persists(stub_external_services) -> None:
     """/ping → PingHandler matches → reply sent + raw/message/response rows persisted."""
-    tg, persistence = stub_external_services
+    tg, persistence, _fetcher = stub_external_services
 
     response = client.post("/webhook", json=_payload("/ping"), headers=_headers())
 
@@ -96,7 +96,7 @@ def test_ping_payload_dispatches_handler_sends_reply_and_persists(stub_external_
 
 def test_unhandled_payload_persists_event_no_send(stub_external_services) -> None:
     """Text that no handler matches → raw + message rows + update_unhandled event, no send."""
-    tg, persistence = stub_external_services
+    tg, persistence, _fetcher = stub_external_services
 
     response = client.post("/webhook", json=_payload("totally random text"), headers=_headers())
 
@@ -109,26 +109,31 @@ def test_unhandled_payload_persists_event_no_send(stub_external_services) -> Non
     assert "update_unhandled" in events
 
 
-def test_photo_payload_persists_file_row(stub_external_services) -> None:
-    _tg, persistence = stub_external_services
+def test_photo_payload_persists_file_row_and_schedules_fetch(stub_external_services) -> None:
+    _tg, persistence, fetcher = stub_external_services
 
     response = client.post("/webhook", json=_photo_payload(), headers=_headers())
 
     assert response.status_code == 200
+    # Orchestrator writes the pending file row at intake time
     assert len(persistence.files) == 1
     file_row = persistence.files[0]
     assert file_row.file_type == "photo"
-    # Largest photo size wins
-    assert file_row.file_id == "big"
+    assert file_row.file_id == "big"  # largest photo size wins
     assert file_row.file_size_bytes == 9999
+    assert file_row.download_status == "pending"
     # Message also recorded with photo type
     assert persistence.messages[0].message_type == "photo"
     assert persistence.messages[0].text == "look"  # caption stored in text column
+    # File-storage handler scheduled the background fetch
+    assert len(fetcher.scheduled) == 1
+    assert fetcher.scheduled[0].file_id == "big"
+    assert fetcher.scheduled[0].file_type == "photo"
 
 
 def test_malformed_payload_records_event_only(stub_external_services) -> None:
     """Missing update_id → parser raises → malformed_update event, nothing else."""
-    _tg, persistence = stub_external_services
+    _tg, persistence, _fetcher = stub_external_services
 
     response = client.post(
         "/webhook",
@@ -154,7 +159,7 @@ def test_handler_exception_records_error_event_and_returns_200(
     monkeypatch, stub_external_services
 ) -> None:
     """A handler that raises is caught; webhook returns 200 and records the error event."""
-    _tg, persistence = stub_external_services
+    _tg, persistence, _fetcher = stub_external_services
 
     class _Boom:
         name = "boom"

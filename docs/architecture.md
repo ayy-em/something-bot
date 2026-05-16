@@ -85,7 +85,7 @@ Per request, `POST /webhook` runs:
    with a `malformed_update` event row.
 2. Persist the raw payload to `telegram_updates_raw`.
 3. Build and persist a `telegram_messages` row (and, for photo / document
-   / voice content, a `telegram_files` row).
+   / voice content, a `telegram_files` row with `download_status="pending"`).
 4. Dispatch to the matching handler. Handlers are pure — they return a
    `HandlerResult` with optional `reply_text` and never call out to
    Telegram or BigQuery directly.
@@ -93,6 +93,30 @@ Per request, `POST /webhook` runs:
    writes a row to `bot_responses` (success or failure either way).
 6. Errored or unhandled outcomes emit a `processing_events` row.
 7. Return `200 {"status": "ok"}`.
+
+## File storage (#20)
+
+Private-chat photo / document / voice uploads are mirrored into GCS bucket
+`something-bot-telegram-files`. The `FileStorageHandler` matches those
+updates and hands them to a `FileFetcher`; the default `InlineFileFetcher`
+runs the download as an `asyncio.create_task` after the webhook has
+already returned 200. Decision record:
+[decisions/0002-async-file-processing.md](decisions/0002-async-file-processing.md).
+
+Background task per upload:
+
+1. `getFile` → resolve Telegram's file path.
+2. Download bytes from Telegram's CDN.
+3. Upload to GCS under key
+   `telegram/{bot_id}/{chat_id}/{YYYY-MM-DD}/{file_unique_id}__{filename}`.
+4. Append a `telegram_files` completion row with `download_status="success"`
+   and the `gs://...` URI — or `"failed"` plus the captured error.
+
+Group / supergroup / channel file uploads get the same intake `telegram_files`
+pending row, but no download (SPEC §6.3 — bot only acts in private chats).
+
+For background tasks to outlive the 200 response, the Cloud Run container
+runs with `cpu_idle = false` (declared in `infra/terraform/main.tf`).
 
 ## Conventions
 

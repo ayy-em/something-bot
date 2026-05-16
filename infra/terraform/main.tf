@@ -276,6 +276,10 @@ resource "google_cloud_run_v2_service" "main" {
           cpu    = var.cloudrun_settings.cpu
           memory = var.cloudrun_settings.memory
         }
+        # CPU stays allocated after the response is flushed so background
+        # asyncio tasks survive (file download → GCS upload). See decision
+        # 0002. Cost impact at our concurrency is in the noise.
+        cpu_idle = false
       }
 
       env {

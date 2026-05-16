@@ -29,7 +29,9 @@ from something_really_bot.features.commands.handler import (
     StartCommandHandler,
 )
 from something_really_bot.features.example.handler import PingHandler
+from something_really_bot.features.file_storage.handler import FileStorageHandler
 from something_really_bot.features.hello_world.handler import HelloWorldHandler
+from something_really_bot.file_storage.fetcher import get_file_fetcher
 from something_really_bot.logging import get_logger
 from something_really_bot.persistence import (
     EventRecord,
@@ -67,6 +69,7 @@ def build_default_dispatcher() -> Dispatcher:
     dispatcher = Dispatcher()
     dispatcher.register(StartCommandHandler())
     dispatcher.register(HelpCommandHandler())
+    dispatcher.register(FileStorageHandler())
     dispatcher.register(HelloWorldHandler())
     dispatcher.register(PingHandler())
     return dispatcher
@@ -110,6 +113,7 @@ async def webhook(
         settings=settings,
         telegram_client=get_telegram_client(),
         persistence=get_persistence_service(),
+        file_fetcher=get_file_fetcher(),
     )
 
     try:

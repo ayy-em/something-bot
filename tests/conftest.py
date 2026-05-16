@@ -3,11 +3,12 @@
 Sets the minimum required environment variables so that ``Settings`` can be
 built when the FastAPI app or its dependencies are imported in tests.
 
-Also installs no-op stubs for ``get_telegram_client`` and
-``get_persistence_service`` so webhook integration tests never make real
-HTTP / BigQuery calls. Tests that want to inspect those interactions can
-import :class:`RecordingTelegramClient` / :class:`RecordingPersistence`
-and patch the factories on a per-test basis.
+Also installs no-op stubs for ``get_telegram_client``,
+``get_persistence_service``, and ``get_file_fetcher`` so webhook
+integration tests never make real HTTP / BigQuery / GCS calls. Tests that
+want to inspect those interactions request the
+:func:`stub_external_services` fixture by name to receive the recording
+stubs.
 """
 
 import os
@@ -57,24 +58,39 @@ class RecordingPersistence:
         self.events.append(record)
 
 
+class RecordingFileFetcher:
+    """Stub :class:`FileFetcher` that records ``schedule()`` calls and never
+    actually fetches anything — deterministic, no race against asyncio tasks."""
+
+    def __init__(self) -> None:
+        self.scheduled: list[Any] = []
+
+    def schedule(self, request: Any) -> None:
+        self.scheduled.append(request)
+
+
 @pytest.fixture(autouse=True)
 def stub_external_services(
     monkeypatch: pytest.MonkeyPatch,
-) -> tuple[RecordingTelegramClient, RecordingPersistence]:
-    """Replace the webhook's Telegram + persistence factories with stubs.
+) -> tuple[RecordingTelegramClient, RecordingPersistence, RecordingFileFetcher]:
+    """Replace the webhook's Telegram + persistence + fetcher factories with stubs.
 
     Returns the stubs so individual tests can assert on captured calls.
     """
     from something_really_bot import main as app_main
+    from something_really_bot.file_storage import fetcher as file_fetcher_module
     from something_really_bot.persistence import bigquery as bq_persistence
     from something_really_bot.telegram import client as tg_client
 
     tg = RecordingTelegramClient()
     persistence = RecordingPersistence()
+    fetcher = RecordingFileFetcher()
 
     tg_client.get_telegram_client.cache_clear()
     bq_persistence.get_persistence_service.cache_clear()
+    file_fetcher_module.get_file_fetcher.cache_clear()
     monkeypatch.setattr(app_main, "get_telegram_client", lambda: tg)
     monkeypatch.setattr(app_main, "get_persistence_service", lambda: persistence)
+    monkeypatch.setattr(app_main, "get_file_fetcher", lambda: fetcher)
 
-    return tg, persistence
+    return tg, persistence, fetcher

@@ -66,7 +66,10 @@ class Settings(BaseSettings):
         default="something_bot",
         description="BigQuery dataset for persistence (RFC #17 / decision 0001).",
     )
-    gcs_bucket: str | None = None
+    gcs_bucket: str = Field(
+        default="something-bot-telegram-files",
+        description="GCS bucket for Telegram-uploaded files (RFC #19 / decision 0002).",
+    )
 
     @field_validator("telegram_qa_user_ids", mode="before")
     @classmethod
