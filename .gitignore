@@ -33,6 +33,13 @@ venv/
 .env
 creds.json
 
+# terraform plan output (binary zip; may contain sensitive values).
+# Only environments/*.tfvars are tracked; a top-level *.tfvars is almost
+# always `terraform plan -out=...` output.
+infra/terraform/*.tfvars
+!infra/terraform/environments/*.tfvars
+*.tfplan
+
 # OS
 .DS_Store
 
