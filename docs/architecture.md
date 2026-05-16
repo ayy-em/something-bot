@@ -49,7 +49,7 @@ ahead of implementation. Each layer is replaced as its issue lands.
 | Routing / dispatcher | `routing/` | #14 |
 | Feature handlers | `features/` | #15, #16, #20, #23 … |
 | BigQuery persistence | `persistence/` | #17 (RFC — [0001-bigquery-schema](decisions/0001-bigquery-schema.md)), #18 (implementation) |
-| GCS file storage | `file_storage/` | #20 |
+| GCS file storage | `file_storage/` | #19 (RFC — [0002-async-file-processing](decisions/0002-async-file-processing.md)), #20 (implementation) |
 | Cross-feature services | `services/` | as needed |
 | Config / secrets | `config.py` | #12 onward |
 | Logging | `logging.py` | TBD |
