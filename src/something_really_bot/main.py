@@ -34,7 +34,7 @@ from something_really_bot.features.hello_world.handler import HelloWorldHandler
 from something_really_bot.features.openai_fallback.handler import OpenAIFallbackHandler
 from something_really_bot.features.tiktok_reminder.handler import TikTokReminderJob
 from something_really_bot.file_storage.fetcher import get_file_fetcher
-from something_really_bot.logging import get_logger
+from something_really_bot.logging import configure_logging, get_logger
 from something_really_bot.persistence import (
     EventRecord,
     FileRecord,
@@ -104,7 +104,12 @@ job_registry: JobRegistry = build_default_job_registry()
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-    """Eagerly build :class:`Settings` so missing required config crashes the boot."""
+    """Eagerly build :class:`Settings` so missing required config crashes the boot.
+
+    Also installs the structured JSON log handler so Cloud Logging picks
+    up severity and ``jsonPayload`` fields (#28).
+    """
+    configure_logging()
     get_settings()
     yield
 
