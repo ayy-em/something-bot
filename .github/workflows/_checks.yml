@@ -6,6 +6,10 @@ on:
 permissions:
   contents: read
 
+env:
+  TERRAFORM_VERSION: 1.15.3
+  TFLINT_VERSION: v0.59.1
+
 jobs:
   python-checks:
     name: Python — ruff + pytest
@@ -33,7 +37,7 @@ jobs:
         run: uv run pytest -q
 
   terraform-checks:
-    name: Terraform — fmt + validate
+    name: Terraform — fmt + validate + tflint
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -45,7 +49,7 @@ jobs:
       - name: Install terraform
         uses: hashicorp/setup-terraform@v4
         with:
-          terraform_version: 1.15.3
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
           terraform_wrapper: false
 
       - name: terraform fmt -check
@@ -56,3 +60,124 @@ jobs:
 
       - name: terraform validate
         run: terraform validate
+
+      - name: Install tflint
+        uses: terraform-linters/setup-tflint@v6
+        with:
+          tflint_version: ${{ env.TFLINT_VERSION }}
+
+      - name: tflint --init
+        run: tflint --init
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: tflint
+        run: tflint --recursive --format=compact
+
+  terraform-plan-preflight:
+    name: Terraform plan preflight (planner SA configured?)
+    runs-on: ubuntu-latest
+    outputs:
+      enabled: ${{ steps.check.outputs.enabled }}
+    steps:
+      - name: Check that planner WIF secrets are set
+        id: check
+        env:
+          WIF_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          PLANNER_SA: ${{ secrets.GCP_PLANNER_SERVICE_ACCOUNT }}
+        run: |
+          if [ -n "${WIF_PROVIDER}" ] && [ -n "${PLANNER_SA}" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Terraform plan skipped: GCP_WORKLOAD_IDENTITY_PROVIDER and/or GCP_PLANNER_SERVICE_ACCOUNT are unset. After applying #29's Terraform, set GCP_PLANNER_SERVICE_ACCOUNT to the planner SA email to enable plan-on-PR."
+          fi
+
+  terraform-plan:
+    name: Terraform — plan
+    runs-on: ubuntu-latest
+    needs: [terraform-checks, terraform-plan-preflight]
+    if: needs.terraform-plan-preflight.outputs.enabled == 'true'
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    defaults:
+      run:
+        working-directory: infra/terraform
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Authenticate to GCP via WIF (planner SA)
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_PLANNER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Install terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: terraform init (with backend)
+        run: terraform init -input=false
+
+      - name: terraform plan
+        id: plan
+        run: |
+          set +e
+          terraform plan \
+            -no-color \
+            -input=false \
+            -var-file=environments/prod.tfvars \
+            -out=tfplan \
+            -detailed-exitcode \
+            > plan.stdout 2> plan.stderr
+          exit_code=$?
+          echo "exit_code=${exit_code}" >> "$GITHUB_OUTPUT"
+          # 0 = no diff, 2 = diff, anything else = error
+          if [ "$exit_code" -eq 1 ]; then
+            cat plan.stderr
+            exit 1
+          fi
+
+      - name: Render plan summary
+        id: summary
+        run: |
+          terraform show -no-color tfplan > plan.txt
+          {
+            echo "## Terraform plan"
+            echo
+            echo "Exit code: \`${{ steps.plan.outputs.exit_code }}\` (\`0\`=no changes, \`2\`=changes, \`1\`=error)"
+            echo
+            echo "<details><summary>Plan output (truncated to 60 KiB)</summary>"
+            echo
+            echo '```hcl'
+            head -c 61440 plan.txt
+            echo
+            echo '```'
+            echo
+            echo "</details>"
+          } > plan-summary.md
+          cat plan-summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Comment plan on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync(
+              'infra/terraform/plan-summary.md',
+              'utf8',
+            );
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            await github.rest.issues.createComment({
+              owner, repo, issue_number, body,
+            });
