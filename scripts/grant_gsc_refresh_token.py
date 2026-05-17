@@ -154,9 +154,7 @@ def _run_oauth_flow(client_secrets_path: Path, port: int) -> str:
         access_type="offline",
         prompt="consent",
         open_browser=True,
-        success_message=(
-            "Auth complete. Refresh token captured. You can close this tab."
-        ),
+        success_message=("Auth complete. Refresh token captured. You can close this tab."),
     )
 
     refresh_token = credentials.refresh_token
