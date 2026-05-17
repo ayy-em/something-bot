@@ -77,6 +77,15 @@ class Settings(BaseSettings):
         default="gpt-4o-mini",
         description="OpenAI chat model used by the fallback handler.",
     )
+    openai_context_bucket: str | None = Field(
+        default="something-bot-openai-context",
+        description=(
+            "GCS bucket holding the persistent .md context files prepended to "
+            "every OpenAI chat completion (#26). When unset/empty, no context "
+            "is loaded and the fallback handler keeps the #23 no-context "
+            "behaviour."
+        ),
+    )
 
     # --- Feature flags ---
     hello_world_mode: bool = Field(
