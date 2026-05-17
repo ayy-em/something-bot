@@ -9,7 +9,8 @@ the video pinned to the trigger message.
 ```
 incoming text message
   → detector.detect(text) → (url, platform) | None
-    → ack: send "Link received, fetching the {Instagram|TikTok} video…"
+    → ack: send "<i>…fetching the {Instagram|TikTok} video…</i>" (HTML, italics)
+                              ↳ capture ack_message_id
     → react: 👀 on trigger message (best-effort)
     → schedule asyncio.create_task(_run_background)  # webhook returns 200 immediately
         ├── jobs.insert_pending(...)        → row id
@@ -18,15 +19,23 @@ incoming text message
         ├── jobs.update_status(id, "uploading")
         ├── gcs.upload_bytes(...) at video_downloads/{chat_id}/{message_id}/{filename}
         ├── jobs.update_status(id, "sending")
+        ├── telegram.delete_message(ack_message_id)   # best-effort
         ├── telegram.send_video(chat_id, path, reply_to=message_id, duration, ...)
         ├── jobs.mark_succeeded(id, ...)
         └── persistence.record_event("video_downloader_succeeded", ...)
 ```
 
+**One bot message at a time.** The "fetching…" ack is sent in italics
+(`parse_mode=HTML`, wrapped in `<i>…</i>`) and *deleted* right before
+the video lands — Telegram won't let us edit a text message into a
+media message, so delete+send is the only single-footprint option.
+
 Failure at any step:
 
 * mark row failed with `error_class`/`error_message`
-* send a single user-visible error reply (see matrix below)
+* edit the ack in place with a user-visible error reply (see matrix
+  below); if the ack is already gone (e.g. send-video failed *after*
+  the delete) fall back to a fresh `send_message`
 * swallow further send failures so we don't loop on a broken chat
 
 Tempdir is always cleaned up with `shutil.rmtree(..., ignore_errors=True)`.

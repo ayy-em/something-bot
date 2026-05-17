@@ -61,7 +61,7 @@ ACK_PARSE_MODE = "HTML"
 _ACK_TEMPLATES = [
     "Fuck's sake, another link received, ugh, alright, fetching the {platform} video…",
     "Oh shit, here we go again... Downloading the {platform} video now…",
-    "Ugh, another <i>hilarious</i> video probably.. Okay then, let me get the {platform} video",
+    "Ugh, another hilarious video probably.. Okay then, let me get the {platform} video.",
     (
         "Sure, let's waste some more energy and bandwidth to download "
         "some random {platform} video crap. One sec."
@@ -84,7 +84,9 @@ def _platform_label(platform: str) -> str:
 
 
 def get_ack_template(video_platform: str) -> str:
-    return random.choice(_ACK_TEMPLATES).format(platform=_platform_label(video_platform))
+    """Render the ack in italics (#56-style processing message — #42)."""
+    inner = random.choice(_ACK_TEMPLATES).format(platform=_platform_label(video_platform))
+    return f"<i>{inner}</i>"
 
 
 # Error → user-facing message. Keep these specific enough that a curious
@@ -122,6 +124,13 @@ class _BackgroundContext:
     gcs_storage: GCSStorage
     job_storage: VideoJobStorage | None
     persistence_record_event: Callable[[EventRecord], None] | None
+    # Message id of the "fetching…" ack, if the ack send succeeded.
+    # On success the background task deletes this message before
+    # sending the video so the user only ever sees one bot message
+    # at a time; on failure it edits this message with the error
+    # text. ``None`` when the ack send failed — we fall back to a
+    # fresh ``send_message`` for the error path in that case.
+    ack_message_id: int | None = None
 
 
 class VideoDownloaderHandler:
@@ -165,13 +174,18 @@ class VideoDownloaderHandler:
 
         # Best-effort ack — we want to fail open: if Telegram is flaky,
         # the user still gets the video when the background task lands.
+        ack_message_id: int | None = None
         try:
-            await telegram_client.send_message(
+            ack_response = await telegram_client.send_message(
                 chat_id=update.chat_id,
                 text=ack_text,
                 reply_to_message_id=update.message_id,
                 parse_mode=ACK_PARSE_MODE,
             )
+            if isinstance(ack_response, dict):
+                raw_id = ack_response.get("message_id")
+                if isinstance(raw_id, int):
+                    ack_message_id = raw_id
         except TelegramSendError as exc:
             _logger.warning(
                 "video_downloader_ack_failed",
@@ -201,6 +215,7 @@ class VideoDownloaderHandler:
             persistence_record_event=(
                 ctx.persistence.record_event if ctx.persistence is not None else None
             ),
+            ack_message_id=ack_message_id,
         )
         self._schedule(_run_background(bg))
 
@@ -284,6 +299,12 @@ async def _run_background(ctx: _BackgroundContext) -> None:
                 if job_id is not None and ctx.job_storage is not None:
                     await _safe_status(ctx.job_storage, job_id, "sending")
 
+                # Take down the "fetching…" ack right before the video
+                # lands so the user only sees one bot message at a time.
+                # Telegram won't let us edit a text message into media,
+                # so delete + send is the only single-footprint option.
+                await _safe_delete_ack(ctx)
+
                 try:
                     sent = await ctx.telegram_client.send_video(
                         chat_id=ctx.chat_id,
@@ -327,19 +348,12 @@ async def _run_background(ctx: _BackgroundContext) -> None:
                     )
                     return
 
-        # Failure path — surface to user.
+        # Failure path — surface to user. Edit the ack in place when
+        # possible so the in-flight "fetching…" message is replaced by
+        # the error rather than left dangling above it. Fall back to a
+        # fresh send if the edit fails or there's no ack to edit.
         if user_facing_error is not None:
-            try:
-                await ctx.telegram_client.send_message(
-                    chat_id=ctx.chat_id,
-                    text=user_facing_error,
-                    reply_to_message_id=ctx.message_id,
-                )
-            except TelegramSendError:
-                _logger.warning(
-                    "video_downloader_user_error_send_failed",
-                    extra={"chat_id": ctx.chat_id},
-                )
+            await _deliver_error_to_user(ctx, user_facing_error)
             if job_id is not None and ctx.job_storage is not None:
                 try:
                     await ctx.job_storage.mark_failed(
@@ -359,6 +373,59 @@ async def _run_background(ctx: _BackgroundContext) -> None:
     finally:
         if cleanup_dir is not None:
             _cleanup_dir(cleanup_dir)
+
+
+async def _safe_delete_ack(ctx: _BackgroundContext) -> None:
+    """Best-effort ``deleteMessage`` on the in-flight ack. Never raises."""
+    if ctx.ack_message_id is None:
+        return
+    try:
+        await ctx.telegram_client.delete_message(
+            chat_id=ctx.chat_id,
+            message_id=ctx.ack_message_id,
+        )
+    except TelegramSendError as exc:
+        _logger.warning(
+            "video_downloader_ack_delete_failed",
+            extra={
+                "chat_id": ctx.chat_id,
+                "ack_message_id": ctx.ack_message_id,
+                "error": f"{type(exc).__name__}: {exc}",
+            },
+        )
+
+
+async def _deliver_error_to_user(ctx: _BackgroundContext, text: str) -> None:
+    """Edit the ack with ``text``; fall back to a fresh send. Never raises."""
+    if ctx.ack_message_id is not None:
+        try:
+            await ctx.telegram_client.edit_message_text(
+                chat_id=ctx.chat_id,
+                message_id=ctx.ack_message_id,
+                text=text,
+            )
+            return
+        except TelegramSendError as exc:
+            _logger.warning(
+                "video_downloader_edit_failed_falling_back_to_send",
+                extra={
+                    "chat_id": ctx.chat_id,
+                    "ack_message_id": ctx.ack_message_id,
+                    "error": f"{type(exc).__name__}: {exc}",
+                },
+            )
+
+    try:
+        await ctx.telegram_client.send_message(
+            chat_id=ctx.chat_id,
+            text=text,
+            reply_to_message_id=ctx.message_id,
+        )
+    except TelegramSendError:
+        _logger.warning(
+            "video_downloader_user_error_send_failed",
+            extra={"chat_id": ctx.chat_id},
+        )
 
 
 async def _safe_status(jobs: VideoJobStorage, job_id: int, status: str) -> None:

@@ -264,6 +264,50 @@ class TelegramClient:
 
         return body.get("result", {})
 
+    async def delete_message(
+        self,
+        chat_id: int,
+        message_id: int,
+    ) -> dict[str, Any]:
+        """POST ``deleteMessage``. Removes a message the bot can act on.
+
+        Used to take down an in-flight "processing…" ack right before
+        replacing it with media (e.g. the downloaded video). Telegram
+        forbids editing a text message into media, so the only way to
+        keep a single bot-message footprint is delete + send.
+
+        Raises:
+            TelegramSendError: HTTP error or ``ok=false`` in the response.
+        """
+        url = f"{self._base_url}/bot{self._token.get_secret_value()}/deleteMessage"
+        payload = {"chat_id": chat_id, "message_id": message_id}
+        response = await self._request("POST", url, json=payload)
+
+        if response.status_code >= 400:
+            _logger.warning(
+                "telegram_delete_http_error",
+                extra={
+                    "status": response.status_code,
+                    "chat_id": chat_id,
+                    "message_id": message_id,
+                },
+            )
+            raise TelegramSendError(f"deleteMessage HTTP {response.status_code}")
+
+        body = response.json()
+        if not body.get("ok"):
+            _logger.warning(
+                "telegram_delete_not_ok",
+                extra={
+                    "chat_id": chat_id,
+                    "message_id": message_id,
+                    "description": body.get("description"),
+                },
+            )
+            raise TelegramSendError(f"deleteMessage not ok: {body.get('description')!r}")
+
+        return body
+
     async def set_message_reaction(
         self,
         chat_id: int,

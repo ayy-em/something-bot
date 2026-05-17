@@ -73,11 +73,16 @@ def _group_message(text: str) -> GroupMessage:
 class _FakeTelegram:
     sent_messages: list[dict[str, Any]] = field(default_factory=list)
     sent_videos: list[dict[str, Any]] = field(default_factory=list)
+    edited_messages: list[dict[str, Any]] = field(default_factory=list)
+    deleted_messages: list[dict[str, Any]] = field(default_factory=list)
     reactions: list[dict[str, Any]] = field(default_factory=list)
     send_message_raises: BaseException | None = None
     send_video_raises: BaseException | None = None
+    edit_message_raises: BaseException | None = None
+    delete_message_raises: BaseException | None = None
     reaction_raises: BaseException | None = None
     send_video_message_id: int = 555
+    ack_message_id: int = 1
 
     async def send_message(self, chat_id, text, *, reply_to_message_id=None, parse_mode=None):
         if self.send_message_raises is not None:
@@ -89,7 +94,32 @@ class _FakeTelegram:
             "parse_mode": parse_mode,
         }
         self.sent_messages.append(record)
-        return {"message_id": 1}
+        return {"message_id": self.ack_message_id}
+
+    async def edit_message_text(self, chat_id, message_id, text, *, parse_mode=None):
+        if self.edit_message_raises is not None:
+            raise self.edit_message_raises
+        # Mirror Telegram: editing a deleted message returns
+        # ``message to edit not found``.
+        if any(d["message_id"] == message_id for d in self.deleted_messages):
+            from something_really_bot.telegram.client import TelegramSendError as _Err
+
+            raise _Err("editMessageText not ok: message to edit not found")
+        self.edited_messages.append(
+            {
+                "chat_id": chat_id,
+                "message_id": message_id,
+                "text": text,
+                "parse_mode": parse_mode,
+            }
+        )
+        return {"message_id": message_id}
+
+    async def delete_message(self, chat_id, message_id):
+        if self.delete_message_raises is not None:
+            raise self.delete_message_raises
+        self.deleted_messages.append({"chat_id": chat_id, "message_id": message_id})
+        return {"ok": True}
 
     async def send_video(
         self,
@@ -338,12 +368,13 @@ async def test_handle_happy_path_dm() -> None:
     )
 
     assert result.handled is True
-    # Ack happened synchronously, pinned to the trigger message.
+    # Ack happened synchronously, pinned to the trigger message, in italics.
     assert len(telegram.sent_messages) == 1
     ack = telegram.sent_messages[0]
     assert ack["chat_id"] == 100
     assert ack["reply_to_message_id"] == 42
     assert "video" in ack["text"].lower()
+    assert ack["text"].startswith("<i>") and ack["text"].endswith("</i>")
     assert ack["parse_mode"] == "HTML"
     assert telegram.reactions == [{"chat_id": 100, "message_id": 42, "emoji": "👀"}]
     assert len(scheduled) == 1
@@ -362,6 +393,9 @@ async def test_handle_happy_path_dm() -> None:
     assert video["chat_id"] == 100
     assert video["reply_to_message_id"] == 42
     assert video["duration_seconds"] == 14
+    # Ack was deleted right before the video send so the user only sees
+    # the video, not a stale "fetching…" message above it.
+    assert telegram.deleted_messages == [{"chat_id": 100, "message_id": 1}]
 
     assert jobs.inserted[0].source_url == "https://www.instagram.com/reel/CxYzAbC1234/"
     assert "downloading" in [s for _, s in jobs.status_history]
@@ -428,9 +462,10 @@ async def test_handle_download_failure_replies_with_platform_specific_message() 
     )
     await scheduled[0]
 
-    # Two messages total: the initial ack + the user-facing error.
-    assert len(telegram.sent_messages) == 2
-    error_msg = telegram.sent_messages[1]["text"]
+    # Only the ack was ever sent; the error edits it in place.
+    assert len(telegram.sent_messages) == 1
+    assert len(telegram.edited_messages) == 1
+    error_msg = telegram.edited_messages[0]["text"]
     assert "TikTok" in error_msg
     assert "rate-limiting" in error_msg
     assert telegram.sent_videos == []
@@ -458,7 +493,7 @@ async def test_handle_too_large_uses_clean_user_message() -> None:
     await scheduled[0]
 
     assert telegram.sent_videos == []
-    assert "50 MB" in telegram.sent_messages[1]["text"]
+    assert "50 MB" in telegram.edited_messages[0]["text"]
 
 
 async def test_handle_send_video_failure_reports_to_user() -> None:
@@ -490,8 +525,11 @@ async def test_handle_send_video_failure_reports_to_user() -> None:
 
     # GCS upload should have happened before the send failure.
     assert len(gcs.uploads) == 1
-    # Final user message is the send-failure copy.
+    # Final user message is the send-failure copy. The send-video step
+    # first deletes the ack, so the error path falls back to a fresh
+    # send_message — index 1 (after the ack) — rather than editing.
     assert "Downloaded the video" in telegram.sent_messages[1]["text"]
+    assert len(telegram.deleted_messages) == 1
 
 
 async def test_handle_swallows_ack_failure() -> None:
