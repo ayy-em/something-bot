@@ -100,7 +100,24 @@ For private text messages from QA users that no other handler claimed,
 `OpenAIFallbackHandler` (`features/openai_fallback/`) calls the OpenAI
 chat completions API and replies with the response. The system prompt
 lives in `services/openai_client.py::SYSTEM_PROMPT` and is intentionally
-short and neutral; persistent conversation context is post-MVP (#26).
+short and neutral.
+
+### Persistent context (#26)
+
+A dedicated GCS bucket (`OPENAI_CONTEXT_BUCKET`, default
+`something-bot-openai-context`) holds a small set of `.md` files
+prepended to every completion. `services/openai_context.py::OpenAIContextLoader`
+lists objects under `context/`, downloads each, and emits them as
+extra `{"role": "system"}` messages **after** `SYSTEM_PROMPT` but
+**before** the user prompt. Results are cached in-process for 60s so
+we don't hit GCS once per request, and the total payload is capped at
+32 KiB (excess is truncated and logged).
+
+A GCS failure yields an empty context — the completion still runs.
+Markdown is synced from the developer's machine via
+`scripts/context-sync.sh` (`push`/`pull`) — the files themselves are
+gitignored. Bucket versioning is enabled, so an accidental local-side
+deletion can be recovered with `pull` of a prior version.
 
 Defaults: `gpt-4o-mini`, 25s timeout (the Cloud Run request timeout is
 60s, leaving headroom for the orchestrator's persistence work).

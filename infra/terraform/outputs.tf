@@ -28,6 +28,11 @@ output "telegram_files_bucket" {
   value       = google_storage_bucket.telegram_files.name
 }
 
+output "openai_context_bucket" {
+  description = "GCS bucket holding the persistent OpenAI context .md files (#26). scripts/context-sync.sh syncs to/from this name."
+  value       = google_storage_bucket.openai_context.name
+}
+
 output "webhook_secret_names" {
   description = "Per-bot Secret Manager secret names holding the Telegram webhook header secret. Values must be populated out-of-band before first deploy."
   value       = { for k, s in google_secret_manager_secret.telegram_webhook_secret : k => s.secret_id }

@@ -67,6 +67,25 @@ resource "google_storage_bucket" "telegram_files" {
 }
 
 # --------------------------------------------------------------------------- #
+# GCS bucket for the persistent OpenAI context (#26)
+# --------------------------------------------------------------------------- #
+
+resource "google_storage_bucket" "openai_context" {
+  project                     = var.project_id
+  name                        = var.openai_context_bucket_name
+  location                    = var.region
+  uniform_bucket_level_access = true
+  force_destroy               = false
+  public_access_prevention    = "enforced"
+
+  versioning {
+    enabled = true
+  }
+
+  depends_on = [google_project_service.enabled]
+}
+
+# --------------------------------------------------------------------------- #
 # Service accounts
 # --------------------------------------------------------------------------- #
 
@@ -247,6 +266,12 @@ resource "google_secret_manager_secret_iam_member" "deployer_webhook_secret" {
 resource "google_storage_bucket_iam_member" "cloudrun_files" {
   bucket = google_storage_bucket.telegram_files.name
   role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.cloudrun.email}"
+}
+
+resource "google_storage_bucket_iam_member" "cloudrun_openai_context" {
+  bucket = google_storage_bucket.openai_context.name
+  role   = "roles/storage.objectViewer"
   member = "serviceAccount:${google_service_account.cloudrun.email}"
 }
 
