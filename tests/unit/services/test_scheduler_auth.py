@@ -107,6 +107,55 @@ def test_jobs_call_with_unknown_name_returns_404(
     assert response.status_code == 404
 
 
+def test_jobs_call_records_job_history_on_success(
+    _configured_scheduler_email,
+    monkeypatch: pytest.MonkeyPatch,
+    _register_test_job: _TestJob,
+    stub_job_history,
+) -> None:
+    """A successful scheduled-job run lands one ``succeeded`` row (#53)."""
+    _stub_verify({"email": EXPECTED_SA_EMAIL}, monkeypatch)
+
+    response = client.post("/jobs/test-job", headers={"Authorization": "Bearer faketoken"})
+
+    assert response.status_code == 200
+    assert len(stub_job_history.rows) == 1
+    row = stub_job_history.rows[0]
+    assert row.job_name == "test-job"
+    assert row.status == "succeeded"
+    assert row.chat_id is None
+    assert row.user_id is None
+    assert row.error_class is None
+
+
+def test_jobs_call_records_job_history_on_failure(
+    _configured_scheduler_email,
+    monkeypatch: pytest.MonkeyPatch,
+    stub_job_history,
+) -> None:
+    """A scheduled job that raises lands one ``failed`` row and the 5xx still surfaces."""
+    _stub_verify({"email": EXPECTED_SA_EMAIL}, monkeypatch)
+
+    class _Boom:
+        name = "boom-job"
+
+        async def run(self, _ctx: Any) -> None:
+            raise RuntimeError("scheduled crash")
+
+    monkeypatch.setattr(job_registry, "_handlers", {"boom-job": _Boom()})
+
+    quiet_client = TestClient(app, raise_server_exceptions=False)
+    response = quiet_client.post("/jobs/boom-job", headers={"Authorization": "Bearer faketoken"})
+
+    assert response.status_code == 500
+    assert len(stub_job_history.rows) == 1
+    row = stub_job_history.rows[0]
+    assert row.job_name == "boom-job"
+    assert row.status == "failed"
+    assert row.error_class == "RuntimeError"
+    assert row.error_message == "scheduled crash"
+
+
 def test_jobs_call_without_scheduler_sa_configured_returns_401(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

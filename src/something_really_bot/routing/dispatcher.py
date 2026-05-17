@@ -12,6 +12,8 @@ Telegram retry storms).
 """
 
 import logging
+from dataclasses import replace
+from datetime import UTC, datetime
 
 from something_really_bot.routing.types import (
     BotContext,
@@ -19,6 +21,7 @@ from something_really_bot.routing.types import (
     HandlerError,
     HandlerResult,
 )
+from something_really_bot.services.job_history import derive_job_name
 from something_really_bot.telegram.models import ParsedUpdate
 
 _logger = logging.getLogger(__name__)
@@ -88,9 +91,12 @@ class Dispatcher:
     async def _safe_handle(
         handler: Handler, update: ParsedUpdate, ctx: BotContext
     ) -> HandlerResult:
+        job_name = derive_job_name(handler)
+        started_at = datetime.now(UTC)
         try:
-            return await handler.handle(update, ctx)
+            result = await handler.handle(update, ctx)
         except Exception as exc:  # noqa: BLE001 — webhook must never bubble
+            finished_at = datetime.now(UTC)
             _logger.exception(
                 "handler_raised",
                 extra={
@@ -107,4 +113,14 @@ class Dispatcher:
                     exception_type=type(exc).__name__,
                     message=str(exc),
                 ),
+                job_name=job_name,
+                started_at=started_at,
+                finished_at=finished_at,
             )
+        finished_at = datetime.now(UTC)
+        return replace(
+            result,
+            job_name=result.job_name or job_name,
+            started_at=result.started_at or started_at,
+            finished_at=result.finished_at or finished_at,
+        )

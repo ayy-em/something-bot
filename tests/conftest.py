@@ -81,6 +81,16 @@ class RecordingOpenAIClient:
         return self._reply
 
 
+class RecordingJobHistoryLogger:
+    """Stub :class:`JobHistoryLogger` that captures every ``record()`` call."""
+
+    def __init__(self) -> None:
+        self.rows: list[Any] = []
+
+    async def record(self, row: Any) -> None:
+        self.rows.append(row)
+
+
 @pytest.fixture(autouse=True)
 def stub_external_services(
     monkeypatch: pytest.MonkeyPatch,
@@ -97,6 +107,7 @@ def stub_external_services(
     from something_really_bot import main as app_main
     from something_really_bot.file_storage import fetcher as file_fetcher_module
     from something_really_bot.persistence import bigquery as bq_persistence
+    from something_really_bot.services import job_history as job_history_module
     from something_really_bot.services import openai_client as openai_module
     from something_really_bot.telegram import client as tg_client
 
@@ -109,9 +120,21 @@ def stub_external_services(
     bq_persistence.get_persistence_service.cache_clear()
     file_fetcher_module.get_file_fetcher.cache_clear()
     openai_module.get_openai_client.cache_clear()
+    job_history_module.get_job_history_logger.cache_clear()
     monkeypatch.setattr(app_main, "get_telegram_client", lambda: tg)
     monkeypatch.setattr(app_main, "get_persistence_service", lambda: persistence)
     monkeypatch.setattr(app_main, "get_file_fetcher", lambda: fetcher)
     monkeypatch.setattr(app_main, "get_openai_client", lambda: openai)
+    monkeypatch.setattr(app_main, "get_job_history_logger", lambda: None)
 
     return tg, persistence, fetcher, openai
+
+
+@pytest.fixture
+def stub_job_history(monkeypatch: pytest.MonkeyPatch) -> RecordingJobHistoryLogger:
+    """Install a recording :class:`JobHistoryLogger` for the webhook + /jobs route."""
+    from something_really_bot import main as app_main
+
+    logger = RecordingJobHistoryLogger()
+    monkeypatch.setattr(app_main, "get_job_history_logger", lambda: logger)
+    return logger

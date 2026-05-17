@@ -5,6 +5,7 @@ implementations and lets feature modules depend only on these primitives.
 """
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any, Protocol, runtime_checkable
 
 from something_really_bot.config import Settings
@@ -40,6 +41,7 @@ class BotContext:
     openai_client: Any | None = None
     pending_action: PendingAction | None = None
     pending_action_store: PendingActionStore | None = None
+    job_history_logger: Any | None = None
 
 
 @dataclass(frozen=True)
@@ -66,6 +68,11 @@ class HandlerResult:
             result so the webhook can ack 200 and log the failure.
         extras: Open-ended dict for handler-specific signals (e.g. file
             metadata for downstream async processing in #20).
+        job_name: Folder-name derived from the handler's module path
+            (e.g. ``voice_transcription``), populated by the dispatcher
+            so the webhook can write the row to ``job_history_log`` (#53).
+        started_at / finished_at: Wall-clock bounds of the
+            ``handler.handle`` call, populated by the dispatcher.
     """
 
     handled: bool
@@ -74,6 +81,9 @@ class HandlerResult:
     persist_response: bool = True
     error: HandlerError | None = None
     extras: dict[str, Any] = field(default_factory=dict)
+    job_name: str | None = None
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
 
 
 @runtime_checkable

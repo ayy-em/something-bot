@@ -155,6 +155,62 @@ def test_non_json_body_still_returns_200(stub_external_services) -> None:
     assert response.status_code == 200
 
 
+def test_webhook_records_job_history_row_per_handled_message(
+    stub_external_services, stub_job_history
+) -> None:
+    """Every handled update lands one ``job_history_log`` row (#53)."""
+    response = client.post("/webhook", json=_payload("/ping"), headers=_headers())
+
+    assert response.status_code == 200
+    assert len(stub_job_history.rows) == 1
+    row = stub_job_history.rows[0]
+    assert row.job_name == "example"  # PingHandler lives in features/example
+    assert row.status == "succeeded"
+    assert row.chat_id == 135499785
+    assert row.user_id == 135499785
+    assert row.started_at is not None
+    assert row.finished_at is not None
+    assert row.error_class is None
+
+
+def test_webhook_skips_job_history_for_unhandled_updates(
+    stub_external_services, stub_job_history
+) -> None:
+    response = client.post("/webhook", json=_payload("totally random text"), headers=_headers())
+
+    assert response.status_code == 200
+    assert stub_job_history.rows == []
+
+
+def test_webhook_records_failed_status_when_handler_raises(
+    monkeypatch, stub_external_services, stub_job_history
+) -> None:
+    """A raising handler is captured as ``status="failed"`` in job_history_log."""
+
+    class _Boom:
+        name = "boom"
+
+        def matches(self, _u: ParsedUpdate, _ctx: BotContext) -> bool:
+            return True
+
+        async def handle(self, _u: ParsedUpdate, _ctx: BotContext) -> HandlerResult:
+            raise RuntimeError("crash")
+
+    # Force the module path so derive_job_name returns something stable.
+    _Boom.__module__ = "something_really_bot.features.boom_feature.handler"
+    monkeypatch.setattr(dispatcher, "_handlers", [_Boom(), *dispatcher._handlers])
+
+    response = client.post("/webhook", json=_payload("/ping"), headers=_headers())
+
+    assert response.status_code == 200
+    assert len(stub_job_history.rows) == 1
+    row = stub_job_history.rows[0]
+    assert row.status == "failed"
+    assert row.job_name == "boom_feature"
+    assert row.error_class == "RuntimeError"
+    assert row.error_message == "crash"
+
+
 def test_handler_exception_records_error_event_and_returns_200(
     monkeypatch, stub_external_services
 ) -> None:

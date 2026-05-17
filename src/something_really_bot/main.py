@@ -62,6 +62,11 @@ from something_really_bot.persistence.bigquery import get_persistence_service
 from something_really_bot.routing.dispatcher import Dispatcher
 from something_really_bot.routing.help_registry import HelpRegistry
 from something_really_bot.routing.types import BotContext, HandlerResult
+from something_really_bot.services.job_history import (
+    JobHistoryRow,
+    get_job_history_logger,
+    safe_record,
+)
 from something_really_bot.services.jobs import JobRegistry, UnknownJobError
 from something_really_bot.services.openai_client import get_openai_client
 from something_really_bot.services.pending_actions import (
@@ -177,13 +182,16 @@ async def run_scheduled_job(
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> dict[str, str]:
     """Cloud Scheduler entry point. OIDC-verified by the dependency above."""
+    history_logger = get_job_history_logger()
     ctx = BotContext(
         settings=settings,
         telegram_client=get_telegram_client(),
         persistence=get_persistence_service(),
         file_fetcher=get_file_fetcher(),
         openai_client=get_openai_client(),
+        job_history_logger=history_logger,
     )
+    started_at = datetime.now(UTC)
     try:
         await job_registry.dispatch(job_name, ctx)
     except UnknownJobError:
@@ -193,6 +201,30 @@ async def run_scheduled_job(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"No such job: {job_name!r}",
         ) from None
+    except Exception as exc:
+        await safe_record(
+            history_logger,
+            JobHistoryRow(
+                bot_id=ctx.bot_id,
+                job_name=job_name,
+                status="failed",
+                started_at=started_at,
+                finished_at=datetime.now(UTC),
+                error_class=type(exc).__name__,
+                error_message=str(exc),
+            ),
+        )
+        raise
+    await safe_record(
+        history_logger,
+        JobHistoryRow(
+            bot_id=ctx.bot_id,
+            job_name=job_name,
+            status="succeeded",
+            started_at=started_at,
+            finished_at=datetime.now(UTC),
+        ),
+    )
     return {"status": "ok", "job": job_name}
 
 
@@ -205,6 +237,7 @@ async def webhook(
     received_at = datetime.now(UTC)
     raw = await _safe_json(request)
     pending_action_store = get_pending_action_store()
+    history_logger = get_job_history_logger()
     ctx = BotContext(
         settings=settings,
         telegram_client=get_telegram_client(),
@@ -212,6 +245,7 @@ async def webhook(
         file_fetcher=get_file_fetcher(),
         openai_client=get_openai_client(),
         pending_action_store=pending_action_store,
+        job_history_logger=history_logger,
     )
 
     try:
@@ -248,6 +282,7 @@ async def webhook(
     result = await dispatcher.dispatch(parsed, ctx_with_pending)
     await _send_and_persist_reply(parsed, result, ctx_with_pending, received_at)
     _emit_dispatch_events(parsed, result, ctx_with_pending, received_at)
+    await _safe_record_job_history(parsed, result, ctx_with_pending)
 
     return {"status": "ok"}
 
@@ -444,6 +479,49 @@ async def _send_and_persist_reply(
     )
 
     _ = received_at  # kept for symmetry with the inbound flow; not used here yet.
+
+
+async def _safe_record_job_history(
+    parsed: ParsedUpdate,
+    result: HandlerResult,
+    ctx: BotContext,
+) -> None:
+    """Record one row in ``job_history_log`` for handled dispatches (#53).
+
+    Skips unhandled updates entirely (the table tracks job invocations,
+    not noise). Best-effort: Postgres failures are swallowed inside
+    :func:`safe_record`.
+    """
+    if not result.handled or result.job_name is None:
+        return
+    if result.started_at is None or result.finished_at is None:
+        return
+    status = "failed" if result.error is not None else "succeeded"
+    error_class = result.error.exception_type if result.error is not None else None
+    error_message = result.error.message if result.error is not None else None
+    chat_id, user_id = _extract_chat_and_user(parsed)
+    await safe_record(
+        ctx.job_history_logger,
+        JobHistoryRow(
+            bot_id=ctx.bot_id,
+            job_name=result.job_name,
+            chat_id=chat_id,
+            user_id=user_id,
+            status=status,
+            error_class=error_class,
+            error_message=error_message,
+            started_at=result.started_at,
+            finished_at=result.finished_at,
+        ),
+    )
+
+
+def _extract_chat_and_user(parsed: ParsedUpdate) -> tuple[int | None, int | None]:
+    if isinstance(parsed, PrivateMessage | GroupMessage | SupergroupMessage):
+        return parsed.chat_id, parsed.from_user.id
+    if isinstance(parsed, ChannelPost):
+        return parsed.chat_id, None
+    return None, None
 
 
 def _emit_dispatch_events(

@@ -778,6 +778,54 @@ See `src/something_really_bot/features/summarize/README.md` for the
 extraction + summarization internals, error matrix, and scope
 restrictions.
 
+## 6.18 Job History Log (#53)
+
+Every handled webhook update and every scheduled-job invocation
+produces one row in `public.job_history_log`. The table is the ground
+truth for "did this job run today?" debugging and feeds the daily
+digest tally (#54).
+
+```sql
+CREATE TABLE public.job_history_log (
+    id            BIGSERIAL PRIMARY KEY,
+    bot_id        TEXT NOT NULL,
+    job_name      TEXT NOT NULL,
+    chat_id       BIGINT,
+    user_id       BIGINT,
+    status        TEXT NOT NULL,            -- 'succeeded' | 'failed'
+    error_class   TEXT,
+    error_message TEXT,                     -- truncated at 2000 chars
+    started_at    TIMESTAMPTZ NOT NULL,
+    finished_at   TIMESTAMPTZ NOT NULL
+);
+```
+
+Indexed on `(started_at DESC)` and `(job_name, started_at DESC)` for
+the 24-hour tally query.
+
+**Naming convention.** `job_name` is the *folder name* under
+`src/something_really_bot/features/<name>/` for handler dispatches
+(e.g. `voice_transcription`, `commands`, `openai_fallback`,
+`hello_world`, `example`). For scheduled jobs, it's the name
+registered with the `JobRegistry` and used in `scheduler.tf`
+(e.g. `tiktok-reminder`, `finco-daily-stats`).
+
+**Where it's wired in.**
+
+* `Dispatcher._safe_handle` stamps `job_name`, `started_at`, and
+  `finished_at` onto every `HandlerResult` it returns. The webhook
+  orchestrator reads those off the result and records one row via
+  `services.job_history.safe_record`. Unhandled updates are skipped —
+  the table tracks invocations, not noise.
+* `POST /jobs/{job_name}` wraps the dispatch in start/finish timestamps
+  and records either `status="succeeded"` or `status="failed"`. A
+  failure still propagates (Cloud Scheduler needs the 5xx to retry per
+  policy), but the row lands first.
+
+Recording is best-effort: `safe_record` swallows `PostgresError` and
+logs a warning, the same pattern used elsewhere when Postgres is
+unreachable. A broken database must not break the handler itself.
+
 ---
 
 ## 7. Scheduled Jobs

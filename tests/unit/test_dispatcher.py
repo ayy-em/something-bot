@@ -104,6 +104,35 @@ async def test_handler_exception_is_captured_and_not_raised() -> None:
 
 
 @pytest.mark.asyncio
+async def test_handler_result_carries_job_name_and_timings() -> None:
+    """Dispatcher stamps ``job_name`` (#53) and start/finish timestamps."""
+    dispatcher = Dispatcher()
+    dispatcher.register(_StubHandler("ok", matches=True))
+
+    result = await dispatcher.dispatch(_private_text(), _ctx())
+
+    # _StubHandler lives in this test module → derived job name is the
+    # leaf module name since there's no ``features/`` segment.
+    assert result.job_name is not None
+    assert result.started_at is not None
+    assert result.finished_at is not None
+    assert result.finished_at >= result.started_at
+
+
+@pytest.mark.asyncio
+async def test_handler_exception_still_records_timings() -> None:
+    dispatcher = Dispatcher()
+    dispatcher.register(_StubHandler("raising", matches=True, raises=True))
+
+    result = await dispatcher.dispatch(_private_text(), _ctx())
+
+    assert result.error is not None
+    assert result.job_name is not None
+    assert result.started_at is not None
+    assert result.finished_at is not None
+
+
+@pytest.mark.asyncio
 async def test_bot_id_flows_through_to_handlers() -> None:
     seen: dict[str, str] = {}
 
