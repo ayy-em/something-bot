@@ -56,12 +56,14 @@ def test_format_includes_severity_message_and_logger() -> None:
 
 
 def test_format_promotes_extras_to_top_level() -> None:
-    payload = _format({
-        "name": "foo",
-        "level": logging.WARNING,
-        "msg": "noisy",
-        "extra": {"update_id": 42, "bot_id": "default", "route": "/webhook"},
-    })
+    payload = _format(
+        {
+            "name": "foo",
+            "level": logging.WARNING,
+            "msg": "noisy",
+            "extra": {"update_id": 42, "bot_id": "default", "route": "/webhook"},
+        }
+    )
 
     assert payload["severity"] == "WARNING"
     assert payload["update_id"] == 42
@@ -70,12 +72,14 @@ def test_format_promotes_extras_to_top_level() -> None:
 
 
 def test_format_excludes_reserved_logrecord_attributes() -> None:
-    payload = _format({
-        "name": "foo",
-        "level": logging.INFO,
-        "msg": "x",
-        "extra": {"update_id": 1},
-    })
+    payload = _format(
+        {
+            "name": "foo",
+            "level": logging.INFO,
+            "msg": "x",
+            "extra": {"update_id": 1},
+        }
+    )
 
     for reserved in ("pathname", "lineno", "process", "msecs"):
         assert reserved not in payload, f"reserved key {reserved!r} leaked into payload"
@@ -89,12 +93,14 @@ def test_format_includes_exception_when_exc_info_set() -> None:
 
         exc_info = sys.exc_info()
 
-    payload = _format({
-        "name": "foo",
-        "level": logging.ERROR,
-        "msg": "oops",
-        "exc_info": exc_info,
-    })
+    payload = _format(
+        {
+            "name": "foo",
+            "level": logging.ERROR,
+            "msg": "oops",
+            "exc_info": exc_info,
+        }
+    )
 
     assert payload["severity"] == "ERROR"
     assert "boom" in payload["exception"]
