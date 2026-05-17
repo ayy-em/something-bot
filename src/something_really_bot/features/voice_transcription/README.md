@@ -56,13 +56,14 @@ Summary:
 <i><1 sentence emotion read></i>
 
 Transcript:
-<i><full transcript></i>
+<blockquote><full transcript></blockquote>
 ```
 
-Sent with `parse_mode="HTML"`. Summary content, emotion read, and the
-transcript are wrapped in `<i>` — labels stay plain. Free-form OpenAI
-output is `html.escape`-d before interpolation so a stray `<` in a
-transcript doesn't break the HTML parse.
+Sent with `parse_mode="HTML"`. Summary and emotion read are italicized;
+the transcript itself is wrapped in `<blockquote>` so Telegram renders
+it as a real quote block. Free-form OpenAI output is `html.escape`-d
+before interpolation so a stray `<` in a transcript doesn't break the
+HTML parse.
 
 Summary and emotion sit on adjacent lines (no blank line between) — the
 emotion read is a one-liner extension of the summary in practice.

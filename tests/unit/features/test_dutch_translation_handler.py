@@ -216,9 +216,11 @@ async def test_command_with_inline_args_translates_immediately() -> None:
     assert tr.calls == ["Goedemiddag"]
     # No pending state set — inline mode bypasses it.
     assert pending.set_calls == []
-    assert len(tg.sent) == 1
-    assert "<i>Good afternoon</i>" in tg.sent[0]["text"]
-    assert tg.sent[0]["parse_mode"] == "HTML"
+    # Two messages: the "Translating…" ack and then the reply.
+    assert len(tg.sent) == 2
+    assert tg.sent[0]["text"] == "Translating…"
+    assert "<i>Good afternoon</i>" in tg.sent[1]["text"]
+    assert tg.sent[1]["parse_mode"] == "HTML"
 
 
 async def test_followup_text_translates_and_clears_pending() -> None:
@@ -230,7 +232,8 @@ async def test_followup_text_translates_and_clears_pending() -> None:
     assert len(pending.clear_calls) == 1
     assert pending.clear_calls[0]["chat_id"] == 100
     assert pending.clear_calls[0]["user_id"] == 999
-    assert "<i>How are you</i>" in tg.sent[0]["text"]
+    assert tg.sent[0]["text"] == "Translating…"
+    assert "<i>How are you</i>" in tg.sent[1]["text"]
 
 
 async def test_followup_text_with_missing_translator_replies_unavailable() -> None:
@@ -252,8 +255,10 @@ async def test_followup_text_translator_error_replies_user_error() -> None:
 
     await handler.handle(_text("Hoe gaat het"), _ctx(_pending()))
 
-    assert len(tg.sent) == 1
-    assert "translation service" in tg.sent[0]["text"]
+    # Two messages: ack + user-facing error.
+    assert len(tg.sent) == 2
+    assert tg.sent[0]["text"] == "Translating…"
+    assert "translation service" in tg.sent[1]["text"]
 
 
 async def test_empty_followup_text_replies_with_prompt() -> None:

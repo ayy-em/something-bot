@@ -64,11 +64,15 @@ ACK_REACTION = "👀"
 ACK_TEXT = "Transcribing your voice memo…"
 REPLY_PARSE_MODE = "HTML"
 
-# Summary text + emotion read are wrapped in <i>; ditto the transcript.
+# Summary + emotion are italicized; the transcript itself is wrapped
+# in <blockquote> so it renders as a real quote block in Telegram.
 # Free-form OpenAI output is run through ``html.escape`` first so any
 # literal angle brackets in the transcript don't break Telegram's HTML
 # parse.
-_REPLY_TEMPLATE = "Summary:\n<i>{summary}</i>\n<i>{emotion}</i>\n\nTranscript:\n<i>{transcript}</i>"
+_REPLY_TEMPLATE = (
+    "Summary:\n<i>{summary}</i>\n<i>{emotion}</i>\n\n"
+    "Transcript:\n<blockquote>{transcript}</blockquote>"
+)
 
 _ERROR_TOO_LONG = "That voice memo is over the 10-minute limit. Try sending a shorter one."
 _ERROR_TOO_LARGE = "That voice memo is too large to transcribe. Try sending a shorter one."

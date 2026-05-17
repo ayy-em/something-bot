@@ -45,7 +45,8 @@ from something_really_bot.telegram.models import (
 _logger = get_logger(__name__)
 
 COMMAND_NAME = "dutch"
-PROMPT_TEXT = "Send me the Dutch text you want translated to English (within 10 minutes)."
+PROMPT_TEXT = "Now send the Dutch text you want translated to English."
+TRANSLATING_ACK = "Translating…"
 REPLY_PARSE_MODE = "HTML"
 
 _REPLY_TEMPLATE = "<i>{translation}</i>"
@@ -156,6 +157,20 @@ class DutchTranslationHandler:
             # Empty follow-up — gently re-prompt.
             await self._send_error(telegram_client, update, PROMPT_TEXT)
             return HandlerResult(handled=True, handler_name=self.name)
+
+        # Immediate ack so the user sees their query was received even
+        # when the OpenAI call takes a beat.
+        try:
+            await telegram_client.send_message(
+                chat_id=update.chat_id,
+                text=TRANSLATING_ACK,
+                reply_to_message_id=update.message_id,
+            )
+        except TelegramSendError:
+            _logger.warning(
+                "dutch_translation_ack_send_failed",
+                extra={"chat_id": update.chat_id},
+            )
 
         try:
             translation = await translator.translate(dutch_text)

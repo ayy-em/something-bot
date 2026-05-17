@@ -284,7 +284,7 @@ async def test_happy_path_private() -> None:
     assert "<i>A friendly greeting.</i>" in final
     assert "<i>The speaker sounds cheerful.</i>" in final
     assert "Transcript:" in final
-    assert "<i>Hello there.</i>" in final
+    assert "<blockquote>Hello there.</blockquote>" in final
     assert telegram.sent_messages[1]["reply_to_message_id"] == 42
     assert telegram.sent_messages[1]["parse_mode"] == "HTML"
 

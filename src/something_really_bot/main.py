@@ -96,8 +96,9 @@ def build_default_dispatcher() -> Dispatcher:
     the order the auto-generated ``/help`` (#27) lists features in.
     """
     dispatcher = Dispatcher()
-    dispatcher.register(StartCommandHandler())
-    dispatcher.register(HelpCommandHandler(HelpRegistry(lambda: dispatcher.handlers)))
+    help_registry = HelpRegistry(lambda: dispatcher.handlers)
+    dispatcher.register(StartCommandHandler(help_registry))
+    dispatcher.register(HelpCommandHandler(help_registry))
     # /make-sticker (#44), /ocr (#45), and /summarize (#46) must precede
     # FileStorageHandler: when a user is mid-flow, their next photo or
     # document belongs to the right pipeline, not the generic

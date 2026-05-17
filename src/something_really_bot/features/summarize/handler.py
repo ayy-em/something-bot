@@ -50,9 +50,7 @@ from something_really_bot.telegram.models import (
 _logger = get_logger(__name__)
 
 COMMAND_NAME = "summarize"
-PROMPT_TEXT = (
-    "Send me a PDF, DOCX, TXT, or Markdown file and I'll give you a TL;DR (within 10 minutes)."
-)
+PROMPT_TEXT = "Now send a PDF, DOCX, TXT, or Markdown file and I'll give you a TL;DR."
 REPLY_PARSE_MODE = "HTML"
 
 _REPLY_TEMPLATE = "<i>{summary}</i>"
@@ -261,11 +259,7 @@ async def _run_background(ctx: _BackgroundContext) -> None:
             extracted_text = extracted.text
             truncated = extracted.truncated
 
-    if (
-        user_facing_error is None
-        and extracted_text is not None
-        and not extracted_text.strip()
-    ):
+    if user_facing_error is None and extracted_text is not None and not extracted_text.strip():
         user_facing_error = _ERROR_EMPTY_DOCUMENT
         error_class = "EmptyDocument"
         error_message = "Extractor produced empty text"

@@ -9,10 +9,11 @@ from pydantic import SecretStr
 
 from something_really_bot.config import Settings
 from something_really_bot.features.commands.handler import (
-    START_REPLY,
+    START_HEADER,
     HelpCommandHandler,
     StartCommandHandler,
 )
+from something_really_bot.routing.help_registry import HelpRegistry
 from something_really_bot.routing.types import BotContext
 from something_really_bot.telegram.models import (
     CommandContent,
@@ -71,14 +72,33 @@ def _supergroup_command(command: str) -> SupergroupMessage:
     )
 
 
-async def test_start_handler_returns_static_reply() -> None:
-    handler = StartCommandHandler()
+async def test_start_handler_renders_welcome_with_feature_list() -> None:
+    class _FakeHandler:
+        name = "fake"
+        description = "Do a fake thing."
+        help_usage = "/fake"
+
+    registry = HelpRegistry(lambda: (_FakeHandler(),))
+    handler = StartCommandHandler(registry)
 
     result = await handler.handle(_private_command("/start"), _ctx())
 
     assert result.handled is True
     assert result.handler_name == StartCommandHandler.name
-    assert result.reply_text == START_REPLY
+    assert result.reply_text is not None
+    assert result.reply_text.startswith(START_HEADER)
+    assert "/fake — Do a fake thing." in result.reply_text
+
+
+async def test_start_handler_without_registry_falls_back_to_placeholder() -> None:
+    handler = StartCommandHandler()
+
+    result = await handler.handle(_private_command("/start"), _ctx())
+
+    assert result.handled is True
+    assert result.reply_text is not None
+    assert START_HEADER in result.reply_text
+    assert "(no documented features yet)" in result.reply_text
 
 
 async def test_help_handler_returns_rendered_registry_body() -> None:

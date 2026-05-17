@@ -25,9 +25,9 @@ class HelpRegistry:
     def __init__(self, get_handlers: Callable[[], Iterable[Handler]]) -> None:
         self._get_handlers = get_handlers
 
-    def render(self) -> str:
-        """Return the rendered ``/help`` text."""
-        lines: list[str] = [self.HEADER, ""]
+    def render(self, *, header: str | None = None) -> str:
+        """Return the rendered help text, with an optional custom header."""
+        lines: list[str] = [header or self.HEADER, ""]
         for handler in self._get_handlers():
             description = getattr(handler, "description", "").strip()
             if not description:

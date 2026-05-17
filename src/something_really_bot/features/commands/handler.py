@@ -9,9 +9,12 @@ Telegram's ``@bot_name`` suffix from the ``command`` field, so matching
 ``"/start"`` is sufficient — both ``/start`` and ``/start@SomethingReallyBot``
 arrive here as ``command="/start"``.
 
-``/help`` is auto-generated from the feature registry: it walks the
-dispatcher's registered handlers and prints one bullet per handler with
-a non-empty ``description``. See ``routing/help_registry.py``.
+Both ``/start`` and ``/help`` render their feature list from
+:class:`HelpRegistry`, which walks the dispatcher's registered handlers
+and prints one bullet per handler with a non-empty ``description``.
+``/start`` adds a welcome header; ``/help`` uses the registry's default
+header. Either way, a new feature lands in both commands automatically
+once its handler is registered.
 """
 
 from something_really_bot.routing.help_registry import HelpRegistry
@@ -22,15 +25,14 @@ from something_really_bot.telegram.models import (
     PrivateMessage,
 )
 
-START_REPLY = "Something Really Bot is online. More features coming soon."
+START_HEADER = "👋 Something Really Bot here. I can do the following:"
 
 
-class _StaticCommandHandler:
-    """Base class: match a single command in a private chat, return static text."""
+class _CommandHandlerBase:
+    """Match a single ``/command`` in a private chat. Subclasses implement ``handle``."""
 
     name: str
     command: str
-    reply_text: str
     description: str = ""
     help_usage: str | None = None
 
@@ -41,20 +43,25 @@ class _StaticCommandHandler:
             return False
         return update.content.command == self.command
 
-    async def handle(self, _update: ParsedUpdate, _ctx: BotContext) -> HandlerResult:
-        return HandlerResult(handled=True, handler_name=self.name, reply_text=self.reply_text)
 
+class StartCommandHandler(_CommandHandlerBase):
+    """``/start`` — welcome + same feature list as ``/help``."""
 
-class StartCommandHandler(_StaticCommandHandler):
     name = "commands.start"
     command = "/start"
-    reply_text = START_REPLY
-    description = "Greeting + intro message."
+    description = "Greeting + intro with the full feature list."
     help_usage = "/start"
 
+    def __init__(self, registry: HelpRegistry | None = None) -> None:
+        self._registry = registry or HelpRegistry(lambda: ())
 
-class HelpCommandHandler:
-    """``/help`` command — rendered from the feature registry on each call."""
+    async def handle(self, _update: ParsedUpdate, _ctx: BotContext) -> HandlerResult:
+        body = self._registry.render(header=START_HEADER)
+        return HandlerResult(handled=True, handler_name=self.name, reply_text=body)
+
+
+class HelpCommandHandler(_CommandHandlerBase):
+    """``/help`` — rendered from the feature registry on each call."""
 
     name = "commands.help"
     command = "/help"
@@ -63,13 +70,6 @@ class HelpCommandHandler:
 
     def __init__(self, registry: HelpRegistry | None = None) -> None:
         self._registry = registry or HelpRegistry(lambda: ())
-
-    def matches(self, update: ParsedUpdate, _ctx: BotContext) -> bool:
-        if not isinstance(update, PrivateMessage):
-            return False
-        if not isinstance(update.content, CommandContent):
-            return False
-        return update.content.command == self.command
 
     async def handle(self, _update: ParsedUpdate, _ctx: BotContext) -> HandlerResult:
         return HandlerResult(
