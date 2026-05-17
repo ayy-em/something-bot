@@ -53,3 +53,10 @@ past_inputs/
 
 # but do track Telegram payload fixtures used by the parser tests
 !tests/fixtures/**/*.json
+
+# OpenAI persistent context (#26): synced from GCS via scripts/context-sync.sh.
+# Never commit the actual .md files — they hold personal context. The
+# example placeholder below is intentionally tracked so a new developer
+# sees the convention.
+local-context/*
+!local-context/README.md.example
