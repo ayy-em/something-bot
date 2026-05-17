@@ -1,19 +1,21 @@
-# FinCo daily stats (#25)
+# Daily digest (#25, generalized in #54)
 
 Single daily Telegram message reporting per-site website performance
-across all configured sites.
+across all configured sites, plus a tally of bot job invocations over
+the trailing 24 hours.
 
 ## Flow
 
 ```
 10:30 Europe/Amsterdam
-  Cloud Scheduler (something-bot-finco-daily-stats, OIDC)
-    → POST /jobs/finco-daily-stats on Cloud Run
-        → FinCoDailyStatsJob.run(ctx)
+  Cloud Scheduler (something-bot-daily-digest, OIDC)
+    → POST /jobs/daily-digest on Cloud Run
+        → DailyDigestJob.run(ctx)
             → for each site in SITES: GA4 in parallel
+            → fetch 24h job tally from job_history_log
             → compose digest with per-site degradation
             → send to settings.something_group_chat_id
-            → persist ResponseRecord(response_type="scheduled_finco_daily_stats")
+            → persist ResponseRecord(response_type="scheduled_daily_digest")
 ```
 
 ## Data sources
@@ -21,17 +23,39 @@ across all configured sites.
 | Source | Module | Surfaces |
 |---|---|---|
 | GA4 Data API | `source/google_analytics.py` | `totalUsers`, `newUsers`, top-5 by `screenPageViews` |
+| `public.job_history_log` (#53) | `services.job_history.JobHistoryLogger.fetch_recent_summary` | per-job ok/failed counts over the last 24h |
 
-The wrapper runs the synchronous Google SDK in a thread via
+The GA4 wrapper runs the synchronous Google SDK in a thread via
 `asyncio.to_thread` so the FastAPI loop is never blocked. Failures are
 funneled to `GoogleAnalyticsError` so the handler can omit a site's
-section without failing the whole digest.
+section without failing the whole digest. Postgres failures on the
+tally query degrade to an empty tally (with a warning) — the website
+sections still send.
 
 Google Search Console is intentionally **not** integrated here. Adding
 GSC requires a personal-OAuth refresh-token flow rather than the
 runtime SA (Google's GSC UI rejects non-Google-account emails). That
 work lives on the backlog — see the GSC integration issue linked from
 SPEC.md.
+
+## Tally section
+
+Rendered only when ``job_history_log`` has at least one row in the
+trailing 24 hours. Rows are grouped by ``job_name`` and counted by
+``status``, sorted by descending total then alphabetically by job
+name:
+
+```
+Jobs (last 24h)
+  video_downloader   3 ok, 1 failed
+  voice_transcription  2 ok
+  daily-digest       1 ok
+```
+
+If both succeeded and failed counts are non-zero, both are listed; a
+zero count is omitted entirely. The section header is plain text (no
+emoji) to keep the visual hierarchy: per-site sections own the
+emoji-heavy stats; the tally is meant to be a glanceable footer.
 
 ## Configuration
 
@@ -72,8 +96,10 @@ the existing binding (idempotent).
 
 ## Tests
 
-- `tests/unit/features/test_finco_daily_stats_handler.py` covers the
-  digest composition, per-site degradation, total-failure fallback,
-  send failure, missing client, and persistence-failure swallowing.
-- `tests/unit/features/test_finco_daily_stats_sources.py` covers the
-  GA4 wrapper with a fake client.
+- `tests/unit/features/test_daily_digest_handler.py` covers the digest
+  composition, per-site degradation, total-failure fallback, send
+  failure, missing client, persistence-failure swallowing, and the
+  job-tally section (omission when empty, rendering + sorting when
+  populated, Postgres-failure degradation).
+- `tests/unit/features/test_daily_digest_sources.py` covers the GA4
+  wrapper with a fake client.

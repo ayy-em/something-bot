@@ -12,7 +12,7 @@ from typing import Any
 
 import pytest
 
-from something_really_bot.features.finco_daily_stats.source.google_analytics import (
+from something_really_bot.features.daily_digest.source.google_analytics import (
     GoogleAnalyticsError,
     fetch_site_metrics,
 )

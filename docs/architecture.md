@@ -154,9 +154,10 @@ Two changes, both small:
    `google_cloud_scheduler_job` and points it at the right Cloud Run
    URL with the right OIDC SA.
 
-Issues #24 (tiktok-reminder) and #25 (finco-daily-stats) are the
-first two consumers of this pattern. As of #24, the registry contains
-the `TikTokReminderJob` (Friday 11:00 Europe/Amsterdam → Irindica).
+Issues #24 (tiktok-reminder) and #25 (daily-digest, generalized in
+#54) are the first two consumers of this pattern. As of #24, the
+registry contains the `TikTokReminderJob` (Friday 11:00
+Europe/Amsterdam → Irindica).
 
 ## File storage (#20)
 

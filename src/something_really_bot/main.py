@@ -28,12 +28,12 @@ from something_really_bot.features.commands.handler import (
     HelpCommandHandler,
     StartCommandHandler,
 )
+from something_really_bot.features.daily_digest.handler import DailyDigestJob
 from something_really_bot.features.dutch_translation.handler import (
     get_dutch_translation_handler,
 )
 from something_really_bot.features.example.handler import PingHandler
 from something_really_bot.features.file_storage.handler import FileStorageHandler
-from something_really_bot.features.finco_daily_stats.handler import FinCoDailyStatsJob
 from something_really_bot.features.hello_world.handler import HelloWorldHandler
 from something_really_bot.features.make_sticker.handler import (
     get_make_sticker_handler,
@@ -137,7 +137,7 @@ def build_default_job_registry() -> JobRegistry:
     """
     registry = JobRegistry()
     registry.register(TikTokReminderJob())
-    registry.register(FinCoDailyStatsJob())
+    registry.register(DailyDigestJob())
     return registry
 
 

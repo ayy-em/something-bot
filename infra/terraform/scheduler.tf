@@ -14,11 +14,11 @@ locals {
       target_path = "/jobs/tiktok-reminder"
       description = "Friday TikTok reminder for Irindica (#24)."
     }
-    finco-daily-stats = {
+    daily-digest = {
       schedule    = "30 10 * * *" # Daily 10:30
       timezone    = "Europe/Amsterdam"
-      target_path = "/jobs/finco-daily-stats"
-      description = "Daily multi-site website stats digest (#25)."
+      target_path = "/jobs/daily-digest"
+      description = "Daily website-stats digest + 24h job tally (#25, #54)."
     }
   }
 }

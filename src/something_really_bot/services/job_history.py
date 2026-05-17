@@ -17,7 +17,7 @@ dispatches) or the registered job name (for scheduled jobs). See
 """
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from functools import lru_cache
 from typing import Any, Literal
 
@@ -75,6 +75,19 @@ class JobHistoryRow:
     error_message: str | None = None
 
 
+@dataclass(frozen=True)
+class JobTallyRow:
+    """Aggregated success/failure count for one job over a time window."""
+
+    job_name: str
+    succeeded: int
+    failed: int
+
+    @property
+    def total(self) -> int:
+        return self.succeeded + self.failed
+
+
 class JobHistoryLogger:
     """Async writer for ``public.job_history_log``."""
 
@@ -89,6 +102,44 @@ class JobHistoryLogger:
         await self._pg.execute(_CREATE_INDEX_STARTED)
         await self._pg.execute(_CREATE_INDEX_NAME_STARTED)
         self._table_ready = True
+
+    async def fetch_recent_summary(
+        self,
+        *,
+        bot_id: str,
+        window: timedelta = timedelta(hours=24),
+    ) -> list["JobTallyRow"]:
+        """Aggregate counts per (job_name, status) over the trailing window.
+
+        Used by the daily digest (#54) to render a "Jobs (last 24h)"
+        section. Returns rows sorted by descending total then job_name.
+        """
+        await self.ensure_table()
+        sql = (
+            f"SELECT job_name, status, COUNT(*) AS count FROM {TABLE_FQN} "
+            "WHERE bot_id = %s AND started_at >= %s "
+            "GROUP BY job_name, status"
+        )
+        since = datetime.now(UTC) - window
+        rows = await self._pg.fetch_all(sql, (bot_id, since))
+        # Aggregate succeeded/failed counts per job_name.
+        per_job: dict[str, dict[str, int]] = {}
+        for row in rows:
+            counts = per_job.setdefault(row["job_name"], {"succeeded": 0, "failed": 0})
+            status = row["status"]
+            count = int(row["count"])
+            if status in counts:
+                counts[status] += count
+        tallies = [
+            JobTallyRow(
+                job_name=name,
+                succeeded=counts["succeeded"],
+                failed=counts["failed"],
+            )
+            for name, counts in per_job.items()
+        ]
+        tallies.sort(key=lambda t: (-t.total, t.job_name))
+        return tallies
 
     async def record(self, row: JobHistoryRow) -> None:
         """Insert one row. Raises :class:`PostgresError` on failure."""

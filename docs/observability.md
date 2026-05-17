@@ -45,7 +45,7 @@ Useful filters built on the JSON payload:
 | One specific update | `jsonPayload.update_id=42` |
 | Telegram send failures only | `jsonPayload.message="telegram_send_failed"` |
 | Webhook calls that never matched a handler | `jsonPayload.message="no_handler_matched"` |
-| Scheduled-job runs (success or failure) | `jsonPayload.message=~"^finco_daily_stats_\|^tiktok_reminder_"` |
+| Scheduled-job runs (success or failure) | `jsonPayload.message=~"^daily_digest_\|^tiktok_reminder_"` |
 | Unhandled handler exceptions | `jsonPayload.message="handler_raised"` |
 
 ## Alerting

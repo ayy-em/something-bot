@@ -1,7 +1,8 @@
-"""Tests for ``services.job_history`` (#53).
+"""Tests for ``services.job_history`` (#53, #54).
 
-Exercises the SQL wrapper, the job-name derivation helper, and the
-best-effort recording semantics — all without touching a real database.
+Exercises the SQL wrapper, the job-name derivation helper, the
+best-effort recording semantics, and the 24h summary query feeding
+the daily digest tally — all without touching a real database.
 """
 
 from dataclasses import dataclass, field
@@ -21,12 +22,20 @@ from something_really_bot.services.job_history import (
 @dataclass
 class _FakePostgres:
     executed: list[tuple[str, tuple[Any, ...]]] = field(default_factory=list)
+    fetched: list[tuple[str, tuple[Any, ...]]] = field(default_factory=list)
+    next_rows: list[list[dict[str, Any]]] = field(default_factory=list)
     execute_raises: BaseException | None = None
 
     async def execute(self, sql: str, params: tuple[Any, ...] = ()) -> None:
         if self.execute_raises is not None:
             raise self.execute_raises
         self.executed.append((sql, params))
+
+    async def fetch_all(self, sql: str, params: tuple[Any, ...] = ()) -> list[dict[str, Any]]:
+        self.fetched.append((sql, params))
+        if not self.next_rows:
+            return []
+        return self.next_rows.pop(0)
 
 
 def _row(**overrides: Any) -> JobHistoryRow:
@@ -120,3 +129,52 @@ def test_derive_job_name_from_instance() -> None:
 
     _Sentinel.__module__ = "something_really_bot.features.commands.handler"
     assert derive_job_name(_Sentinel()) == "commands"
+
+
+async def test_fetch_recent_summary_aggregates_and_sorts() -> None:
+    pg = _FakePostgres(
+        next_rows=[
+            [
+                {"job_name": "video_downloader", "status": "succeeded", "count": 3},
+                {"job_name": "video_downloader", "status": "failed", "count": 1},
+                {"job_name": "voice_transcription", "status": "succeeded", "count": 2},
+                {"job_name": "daily-digest", "status": "succeeded", "count": 1},
+            ]
+        ]
+    )
+    logger = JobHistoryLogger(pg)  # type: ignore[arg-type]
+
+    tally = await logger.fetch_recent_summary(bot_id="default", window=timedelta(hours=24))
+
+    # Sorted by descending total then alphabetically by name on ties.
+    names = [t.job_name for t in tally]
+    assert names == ["video_downloader", "voice_transcription", "daily-digest"]
+    vd = tally[0]
+    assert vd.succeeded == 3
+    assert vd.failed == 1
+    assert vd.total == 4
+
+
+async def test_fetch_recent_summary_returns_empty_when_no_rows() -> None:
+    pg = _FakePostgres(next_rows=[[]])
+    logger = JobHistoryLogger(pg)  # type: ignore[arg-type]
+
+    tally = await logger.fetch_recent_summary(bot_id="default")
+
+    assert tally == []
+
+
+async def test_fetch_recent_summary_window_parameter_is_passed_to_query() -> None:
+    pg = _FakePostgres(next_rows=[[]])
+    logger = JobHistoryLogger(pg)  # type: ignore[arg-type]
+    before = datetime.now(UTC)
+
+    await logger.fetch_recent_summary(bot_id="bot-x", window=timedelta(hours=12))
+
+    assert len(pg.fetched) == 1
+    _, params = pg.fetched[0]
+    assert params[0] == "bot-x"
+    since = params[1]
+    # `since` should be ~12 hours before now.
+    delta = before - since
+    assert timedelta(hours=11, minutes=59) < delta < timedelta(hours=12, minutes=1)

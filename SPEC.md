@@ -808,7 +808,7 @@ the 24-hour tally query.
 (e.g. `voice_transcription`, `commands`, `openai_fallback`,
 `hello_world`, `example`). For scheduled jobs, it's the name
 registered with the `JobRegistry` and used in `scheduler.tf`
-(e.g. `tiktok-reminder`, `finco-daily-stats`).
+(e.g. `tiktok-reminder`, `daily-digest`).
 
 **Where it's wired in.**
 
@@ -832,17 +832,18 @@ unreachable. A broken database must not break the handler itself.
 
 Cron-style work runs via Cloud Scheduler hitting `POST /jobs/{name}` on Cloud Run (#22). Each job is a `JobHandler` registered in `main.py`; the scheduler is defined in `infra/terraform/scheduler.tf` (one entry per job). OIDC verification on the route ensures only the scheduler SA can invoke it.
 
-### 7.1 FinCo daily stats (#25)
+### 7.1 Daily digest (#25, generalized in #54)
 
-Single daily Telegram digest reporting per-site website performance across all configured sites. Schedule: 10:30 Europe/Amsterdam. Recipient: the chat id in the `SOMETHING_GROUP_CHAT_ID` Secret Manager secret.
+Single daily Telegram digest reporting per-site website performance and a 24h tally of bot job invocations. Schedule: 10:30 Europe/Amsterdam. Recipient: the chat id in the `SOMETHING_GROUP_CHAT_ID` Secret Manager secret. Cloud Scheduler entry: `something-bot-daily-digest`. Cloud Run route: `POST /jobs/daily-digest`.
 
 Data sources:
 
 * **Google Analytics 4 Data API** — `totalUsers`, `newUsers`, and the top-5 pages by `screenPageViews`. The Cloud Run runtime SA reads each property; Viewer access is granted via the Admin API since GA4's UI rejects service-account emails. See `scripts/grant_ga4_viewer.py`.
+* **`public.job_history_log` (#53)** — per-job `succeeded`/`failed` counts over the trailing 24 hours, rendered as a "Jobs (last 24h)" section appended below the per-site GA4 sections.
 
 Google Search Console is **out of scope** for #25. The runtime SA cannot be granted GSC access (Google's GSC UI also rejects non-Google-account emails, and GSC has no Admin API for user management), so adding GSC requires a personal-OAuth refresh-token flow against a real Google user with property access. That work is tracked as a separate backlog issue.
 
-Per-site degradation: if GA4 fails for one site, that site's section is omitted; if every site fails, the digest still sends "No data today." so the operator notices the failure mode rather than silent absence.
+Graceful degradation: per-site GA4 failures drop that site's section; Postgres failure on the tally query drops only the tally section; if every site fails *and* the tally is empty, the digest still sends "No data today." so the operator notices the failure mode rather than silent absence.
 
 ---
 
