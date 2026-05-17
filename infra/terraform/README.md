@@ -100,19 +100,56 @@ echo -n "<random-secret-string>" \
 Do the same for `telegram-bot-token-default`, `telegram-qa-users`, and
 `OPENAI_API_KEY` if their values are not already set.
 
-## Structural validation (CI-friendly)
+## CI gates (#29)
 
-These commands only check syntax / refs and don't talk to GCP:
+The repository's GitHub Actions `_checks.yml` workflow runs five gates on
+every PR that touches anything (and as a prerequisite of the `deploy`
+job on pushes to `master`):
+
+1. `terraform fmt -check -recursive`
+2. `terraform init -backend=false -input=false`
+3. `terraform validate`
+4. `tflint --recursive` (with the `google` provider ruleset — see
+   `.tflint.hcl`)
+5. **Real `terraform plan`** against `something-bot-338300` via WIF
+   (planner SA, strictly read-only). Plan output is posted as a PR
+   comment and to the workflow `$GITHUB_STEP_SUMMARY`.
+
+Gate (5) is gated on `GCP_PLANNER_SERVICE_ACCOUNT` being set as a repo
+secret; without it the plan job is skipped (a notice surfaces in the
+run-list), but gates 1–4 still run.
+
+To enable plan-on-PR after applying:
+
+```bash
+terraform output -raw planner_service_account_email
+# put this value into GitHub → Settings → Secrets → Actions →
+#   GCP_PLANNER_SERVICE_ACCOUNT
+```
+
+`GCP_WORKLOAD_IDENTITY_PROVIDER` is reused (same provider as the
+deployer).
+
+### Deploy gating
+
+`deploy.yml` chains `deploy → preflight → checks`; if any gate above
+fails on `master`, the deploy job is skipped and the workflow exits
+non-zero so it's visible at the run-list level. Failing-loud is
+preferable to silent infra drift.
+
+### Running locally
+
+The same commands run cleanly locally with `gcloud auth
+application-default login` against the project:
 
 ```bash
 terraform fmt -check -recursive
-terraform init -backend=false
+terraform init -backend=false -input=false
 terraform validate
+tflint --init && tflint --recursive --format=compact
+terraform init                          # real backend
+terraform plan -var-file=environments/prod.tfvars
 ```
-
-The repository's GitHub Actions workflow (added in #9) runs these on every
-PR. A separate backlog issue tracks adding `tflint` and a real `plan` step
-that runs against the project.
 
 ## Cloud Run settings (RFC for SPEC §18.3)
 
@@ -157,6 +194,4 @@ Manager resource will be planned for the new bot automatically.
 - BigQuery dataset / tables — #18.
 - Cloud Scheduler endpoints — #22.
 - CI deployment workflow — #9.
-- Cloud Logging sinks / alerting — see the dedicated backlog issue.
-- Terraform CI checks (fmt / validate / tflint / real plan) — see the
-  dedicated backlog issue.
+- Cloud Logging sinks / alerting — #28.
