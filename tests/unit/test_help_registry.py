@@ -19,9 +19,7 @@ from something_really_bot.routing.types import BotContext, HandlerResult
 
 
 class _DummyHandler:
-    def __init__(
-        self, *, name: str, description: str, help_usage: str | None = None
-    ) -> None:
+    def __init__(self, *, name: str, description: str, help_usage: str | None = None) -> None:
         self.name = name
         self.description = description
         self.help_usage = help_usage
@@ -75,9 +73,7 @@ def test_render_pulls_fresh_handlers_each_call() -> None:
     registry = HelpRegistry(lambda: handlers)
 
     before = registry.render()
-    handlers.append(
-        _DummyHandler(name="b", description="second", help_usage="/b")
-    )
+    handlers.append(_DummyHandler(name="b", description="second", help_usage="/b"))
     after = registry.render()
 
     assert "second" not in before
