@@ -82,6 +82,7 @@ def _group_voice_msg(voice: Voice | None = None) -> GroupMessage:
 @dataclass
 class _FakeTelegram:
     sent_messages: list[dict[str, Any]] = field(default_factory=list)
+    edited_messages: list[dict[str, Any]] = field(default_factory=list)
     reactions: list[dict[str, Any]] = field(default_factory=list)
     get_file_path_calls: list[str] = field(default_factory=list)
     download_calls: list[str] = field(default_factory=list)
@@ -90,7 +91,9 @@ class _FakeTelegram:
     get_file_raises: BaseException | None = None
     download_raises: BaseException | None = None
     send_message_raises: BaseException | None = None
+    edit_message_raises: BaseException | None = None
     reaction_raises: BaseException | None = None
+    next_message_id: int = 9001
 
     async def send_message(self, chat_id, text, *, reply_to_message_id=None, parse_mode=None):
         if self.send_message_raises is not None:
@@ -103,7 +106,20 @@ class _FakeTelegram:
                 "parse_mode": parse_mode,
             }
         )
-        return {"message_id": 9001}
+        return {"message_id": self.next_message_id}
+
+    async def edit_message_text(self, chat_id, message_id, text, *, parse_mode=None):
+        if self.edit_message_raises is not None:
+            raise self.edit_message_raises
+        self.edited_messages.append(
+            {
+                "chat_id": chat_id,
+                "message_id": message_id,
+                "text": text,
+                "parse_mode": parse_mode,
+            }
+        )
+        return {"message_id": message_id}
 
     async def set_message_reaction(self, chat_id, message_id, emoji):
         if self.reaction_raises is not None:
@@ -250,7 +266,8 @@ def test_does_not_match_text() -> None:
     assert handler.matches(update, _ctx()) is False
 
 
-async def test_happy_path_private() -> None:
+async def test_happy_path_long_memo_private() -> None:
+    """> 60s memo: analyze runs, long template, edits the ack in place."""
     telegram = _FakeTelegram()
     gcs = _FakeGCS()
     transcriber = _FakeTranscriber()
@@ -265,7 +282,7 @@ async def test_happy_path_private() -> None:
         scheduler=lambda c: scheduled.append(c),
     )
 
-    await handler.handle(_private_voice_msg(), _ctx(persistence))
+    await handler.handle(_private_voice_msg(voice=_voice(duration=90)), _ctx(persistence))
 
     # Ack happened synchronously, background queued.
     assert len(telegram.sent_messages) == 1
@@ -275,18 +292,23 @@ async def test_happy_path_private() -> None:
 
     await scheduled[0]
 
-    # Now 2 messages total: ack + final transcript reply
-    assert len(telegram.sent_messages) == 2
+    # No second send_message — the result was *edited* into the ack.
+    assert len(telegram.sent_messages) == 1
+    assert len(telegram.edited_messages) == 1
+    edited = telegram.edited_messages[0]
+    assert edited["chat_id"] == 100
+    assert edited["message_id"] == 9001  # ack message_id
+    assert edited["parse_mode"] == "HTML"
 
-    final = telegram.sent_messages[1]["text"]
-    # Reply leads with "Summary:" — the old "Your transcript." preamble is gone.
-    assert final.startswith("Summary:")
-    assert "<i>A friendly greeting.</i>" in final
-    assert "<i>The speaker sounds cheerful.</i>" in final
+    final = edited["text"]
+    assert final.startswith("Summary & Vibe:")
+    assert "A friendly greeting." in final
+    assert "The speaker sounds cheerful." in final
+    # Summary + emotion live in one blockquote together, the transcript in
+    # another below it.
+    assert "<blockquote>A friendly greeting.\nThe speaker sounds cheerful.</blockquote>" in final
     assert "Transcript:" in final
     assert "<blockquote>Hello there.</blockquote>" in final
-    assert telegram.sent_messages[1]["reply_to_message_id"] == 42
-    assert telegram.sent_messages[1]["parse_mode"] == "HTML"
 
     # GCS upload happened with the expected key shape
     assert len(gcs.uploads) == 1
@@ -300,7 +322,7 @@ async def test_happy_path_private() -> None:
     assert transcriber.transcripts == [b"audio-bytes"]
     assert transcriber.analyses == ["Hello there."]
 
-    # Postgres job lifecycle
+    # Postgres job lifecycle (analyzing step ran for the long memo)
     assert len(jobs.inserted) == 1
     assert [s for _, s in jobs.status_history] == [
         "downloading",
@@ -320,6 +342,86 @@ async def test_happy_path_private() -> None:
     assert persistence.events[0].event == "voice_transcription_succeeded"
 
 
+async def test_happy_path_short_memo_skips_analyze_and_uses_short_template() -> None:
+    """≤ 60s memo: analyze does NOT run, short template, ack edited."""
+    telegram = _FakeTelegram()
+    transcriber = _FakeTranscriber()
+    jobs = _FakeJobStorage()
+    scheduled: list[Any] = []
+    handler = _build_handler(
+        telegram=telegram,
+        gcs=_FakeGCS(),
+        transcriber=transcriber,
+        jobs=jobs,
+        scheduler=lambda c: scheduled.append(c),
+    )
+
+    # 45s ≤ 60s → short path.
+    await handler.handle(_private_voice_msg(voice=_voice(duration=45)), _ctx())
+    await scheduled[0]
+
+    # Transcribe ran; analyze did NOT.
+    assert transcriber.transcripts == [b"audio-bytes"]
+    assert transcriber.analyses == []
+
+    # Ack was edited with the short template.
+    assert len(telegram.edited_messages) == 1
+    final = telegram.edited_messages[0]["text"]
+    assert final == "Voice-to-text:\n<blockquote>Hello there.</blockquote>"
+
+    # Status sequence skipped "analyzing".
+    assert [s for _, s in jobs.status_history] == [
+        "downloading",
+        "uploading",
+        "transcribing",
+        "sending",
+    ]
+    # Row was marked succeeded with NULL summary/emotion.
+    assert jobs.succeeded[0]["summary"] is None
+    assert jobs.succeeded[0]["emotion"] is None
+
+
+async def test_boundary_exactly_60s_uses_short_template() -> None:
+    """Threshold is ``duration > 60`` — 60s exactly stays on the short path."""
+    telegram = _FakeTelegram()
+    transcriber = _FakeTranscriber()
+    scheduled: list[Any] = []
+    handler = _build_handler(
+        telegram=telegram,
+        gcs=_FakeGCS(),
+        transcriber=transcriber,
+        scheduler=lambda c: scheduled.append(c),
+    )
+
+    await handler.handle(_private_voice_msg(voice=_voice(duration=60)), _ctx())
+    await scheduled[0]
+
+    assert transcriber.analyses == []
+    assert telegram.edited_messages[0]["text"].startswith("Voice-to-text:")
+
+
+async def test_edit_failure_falls_back_to_fresh_send() -> None:
+    """If ``editMessageText`` fails, post the reply as a new message instead."""
+    telegram = _FakeTelegram(edit_message_raises=TelegramSendError("can't edit"))
+    transcriber = _FakeTranscriber()
+    scheduled: list[Any] = []
+    handler = _build_handler(
+        telegram=telegram,
+        gcs=_FakeGCS(),
+        transcriber=transcriber,
+        scheduler=lambda c: scheduled.append(c),
+    )
+
+    await handler.handle(_private_voice_msg(voice=_voice(duration=30)), _ctx())
+    await scheduled[0]
+
+    # Edit was attempted; fallback send ran.
+    assert len(telegram.edited_messages) == 0  # raised, so nothing recorded
+    # Two sends: the ack, then the fallback reply.
+    assert len(telegram.sent_messages) == 2
+    assert telegram.sent_messages[1]["text"].startswith("Voice-to-text:")
+
+
 async def test_happy_path_group_uses_group_chat_id() -> None:
     telegram = _FakeTelegram()
     gcs = _FakeGCS()
@@ -332,12 +434,11 @@ async def test_happy_path_group_uses_group_chat_id() -> None:
         scheduler=lambda c: scheduled.append(c),
     )
 
-    await handler.handle(_group_voice_msg(), _ctx())
+    await handler.handle(_group_voice_msg(voice=_voice(duration=90)), _ctx())
     await scheduled[0]
 
     assert telegram.sent_messages[0]["chat_id"] == -1001
-    assert telegram.sent_messages[1]["chat_id"] == -1001
-    assert telegram.sent_messages[1]["reply_to_message_id"] == 77
+    assert telegram.edited_messages[0]["chat_id"] == -1001
     assert gcs.uploads[0]["object_key"].startswith("voice_transcription_requests/-1001/77/")
 
 
@@ -405,9 +506,10 @@ async def test_download_failure_replies_user_error() -> None:
     await handler.handle(_private_voice_msg(), _ctx())
     await scheduled[0]
 
-    # ack + error reply
-    assert len(telegram.sent_messages) == 2
-    assert "pull that voice memo" in telegram.sent_messages[1]["text"]
+    # Only the ack was sent; the error message edits the ack in place.
+    assert len(telegram.sent_messages) == 1
+    assert len(telegram.edited_messages) == 1
+    assert "pull that voice memo" in telegram.edited_messages[0]["text"]
     assert not transcriber.transcripts
     assert len(jobs.failed) == 1
     assert jobs.failed[0]["error_class"] == "TelegramFileError"
@@ -430,7 +532,7 @@ async def test_transcription_failure_replies_user_error() -> None:
     await handler.handle(_private_voice_msg(), _ctx())
     await scheduled[0]
 
-    assert "transcribe" in telegram.sent_messages[1]["text"].lower()
+    assert "transcribe" in telegram.edited_messages[0]["text"].lower()
     # Upload still happened before transcription failed.
     assert len(gcs.uploads) == 1
     assert len(jobs.failed) == 1
@@ -451,10 +553,11 @@ async def test_analysis_failure_replies_user_error() -> None:
         scheduler=lambda c: scheduled.append(c),
     )
 
-    await handler.handle(_private_voice_msg(), _ctx())
+    # Analysis only runs for long memos — use 90s.
+    await handler.handle(_private_voice_msg(voice=_voice(duration=90)), _ctx())
     await scheduled[0]
 
-    assert "summarize" in telegram.sent_messages[1]["text"].lower()
+    assert "summarize" in telegram.edited_messages[0]["text"].lower()
     assert len(jobs.failed) == 1
     assert jobs.failed[0]["error_class"] == "AnalysisError"
 
@@ -475,7 +578,7 @@ async def test_missing_transcriber_replies_user_error() -> None:
     await handler.handle(_private_voice_msg(), _ctx())
     await scheduled[0]
 
-    assert "isn't configured" in telegram.sent_messages[1]["text"]
+    assert "isn't configured" in telegram.edited_messages[0]["text"]
     assert not gcs.uploads
     assert len(jobs.failed) == 1
     assert jobs.failed[0]["error_class"] == "TranscriberUnavailable"

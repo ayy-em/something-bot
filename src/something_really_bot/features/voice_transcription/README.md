@@ -1,9 +1,10 @@
-# Voice transcription (#43)
+# Voice transcription (#43, #56)
 
 Transcribes Telegram voice memos: downloads the file, stores it in
-GCS, transcribes via OpenAI `gpt-4o-transcribe`, generates a 1-3
-sentence summary + 1 sentence emotion read in a single chat call,
-and replies with the result pinned to the trigger message.
+GCS, transcribes via OpenAI `gpt-4o-transcribe`, optionally generates
+a 1-3 sentence summary + 1 sentence emotion read in a single chat
+call (only for memos over 60 seconds), and edits the in-flight
+"Transcribing…" ack with the final reply.
 
 ## Flow
 
@@ -12,6 +13,7 @@ incoming voice message (private, group, supergroup)
   → handler.matches() → True if VoiceContent
     → reject if duration > 10 min or file_size > 25 MB
     → ack: send "Transcribing your voice memo…" (reply_to=msg)
+                              ↳ capture ack_message_id
     → react: 👀 on trigger (best-effort)
     → schedule asyncio.create_task(_run_background)  # webhook returns 200
         ├── jobs.insert_pending(...)                     → row id
@@ -21,11 +23,13 @@ incoming voice message (private, group, supergroup)
         ├── gcs.upload at voice_transcription_requests/{chat}/{msg}/voice_{uniq}.ogg
         ├── jobs.update_status(id, "transcribing")
         ├── openai.audio.transcriptions.create(model="gpt-4o-transcribe")
-        ├── jobs.update_status(id, "analyzing")
-        ├── openai.chat.completions.create with JSON response_format
-        │     → {"summary": "...", "emotion": "..."}
+        ├── if voice.duration > 60s:
+        │     ├── jobs.update_status(id, "analyzing")
+        │     └── openai.chat.completions.create with JSON response_format
+        │           → {"summary": "...", "emotion": "..."}
         ├── jobs.update_status(id, "sending")
-        ├── telegram.send_message(formatted reply, reply_to=msg)
+        ├── telegram.edit_message_text(ack_message_id, formatted reply)
+        │     ↳ falls back to send_message if the edit fails
         ├── jobs.mark_succeeded(...)
         └── persistence.record_event("voice_transcription_succeeded", ...)
 ```
@@ -33,7 +37,8 @@ incoming voice message (private, group, supergroup)
 Failure at any step:
 
 * mark row failed with `error_class`/`error_message`
-* send a single user-visible error reply (matrix below)
+* edit the ack with a user-visible error reply (matrix below) — same
+  edit-or-fallback path as success
 * swallow further Telegram send failures so we don't loop on a broken chat
 
 ## Caps
@@ -48,25 +53,41 @@ Failure at any step:
 Both caps short-circuit before the ack/reaction/background task — the
 user gets one clear rejection reply and that's it.
 
-## Reply format
+## Reply format (#56)
+
+Two templates, picked by duration:
+
+**Long memo (`voice.duration > 60s`)** — runs the OpenAI chat summary
++ emotion read, renders both in one blockquote alongside the
+transcript in another:
 
 ```
-Summary:
-<i><1-3 sentence factual summary></i>
-<i><1 sentence emotion read></i>
+Summary & Vibe:
+<blockquote><1-3 sentence factual summary>
+<1 sentence emotion read></blockquote>
 
 Transcript:
 <blockquote><full transcript></blockquote>
 ```
 
-Sent with `parse_mode="HTML"`. Summary and emotion read are italicized;
-the transcript itself is wrapped in `<blockquote>` so Telegram renders
-it as a real quote block. Free-form OpenAI output is `html.escape`-d
-before interpolation so a stray `<` in a transcript doesn't break the
-HTML parse.
+**Short memo (`voice.duration <= 60s`)** — skips the analyze step
+entirely (saves one OpenAI call and a couple seconds; for a 30-second
+memo the transcript itself is shorter than any commentary would be):
 
-Summary and emotion sit on adjacent lines (no blank line between) — the
-emotion read is a one-liner extension of the summary in practice.
+```
+Voice-to-text:
+<blockquote><full transcript></blockquote>
+```
+
+Sent with `parse_mode="HTML"`. Free-form OpenAI output is
+`html.escape`-d before interpolation so a stray `<` in a transcript
+doesn't break the HTML parse.
+
+**One bot message per memo.** The `Transcribing your voice memo…`
+ack is *edited in place* with the final reply when the background
+task finishes — the user never sees a separate ack message hanging
+around. If the edit fails (rare), we fall back to sending the reply
+as a new message so the user still gets the result.
 
 ## Error matrix
 

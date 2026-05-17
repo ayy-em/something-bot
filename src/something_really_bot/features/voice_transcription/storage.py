@@ -135,8 +135,8 @@ class VoiceJobStorage:
         *,
         gcs_object_path: str,
         transcript: str,
-        summary: str,
-        emotion: str,
+        summary: str | None,
+        emotion: str | None,
         telegram_reply_message_id: int | None,
     ) -> None:
         sql = (

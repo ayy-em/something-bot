@@ -213,6 +213,57 @@ class TelegramClient:
 
         return body.get("result", {})
 
+    async def edit_message_text(
+        self,
+        chat_id: int,
+        message_id: int,
+        text: str,
+        *,
+        parse_mode: str | None = None,
+    ) -> dict[str, Any]:
+        """POST ``editMessageText`` to overwrite an existing bot message.
+
+        Used when we want to replace a "working on it…" ack with the real
+        result instead of posting a second message.
+
+        Raises:
+            TelegramSendError: HTTP error or ``ok=false`` in the response.
+        """
+        url = f"{self._base_url}/bot{self._token.get_secret_value()}/editMessageText"
+        payload: dict[str, Any] = {
+            "chat_id": chat_id,
+            "message_id": message_id,
+            "text": text,
+        }
+        if parse_mode is not None:
+            payload["parse_mode"] = parse_mode
+        response = await self._request("POST", url, json=payload)
+
+        if response.status_code >= 400:
+            _logger.warning(
+                "telegram_edit_http_error",
+                extra={
+                    "status": response.status_code,
+                    "chat_id": chat_id,
+                    "message_id": message_id,
+                },
+            )
+            raise TelegramSendError(f"editMessageText HTTP {response.status_code}")
+
+        body = response.json()
+        if not body.get("ok"):
+            _logger.warning(
+                "telegram_edit_not_ok",
+                extra={
+                    "chat_id": chat_id,
+                    "message_id": message_id,
+                    "description": body.get("description"),
+                },
+            )
+            raise TelegramSendError(f"editMessageText not ok: {body.get('description')!r}")
+
+        return body.get("result", {})
+
     async def set_message_reaction(
         self,
         chat_id: int,

@@ -59,20 +59,25 @@ MAX_DURATION_SECONDS = 10 * 60  # 10 min
 # of Opus voice is ~3-5 MB so this is a defensive cap rather than a
 # practical one.
 MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024
+# Voice memos at or under this duration skip the OpenAI chat summary
+# step — the transcript itself is shorter than any commentary would be
+# (#56).
+SHORT_DURATION_THRESHOLD_SECONDS = 60
 
 ACK_REACTION = "👀"
 ACK_TEXT = "Transcribing your voice memo…"
 REPLY_PARSE_MODE = "HTML"
 
-# Summary + emotion are italicized; the transcript itself is wrapped
-# in <blockquote> so it renders as a real quote block in Telegram.
-# Free-form OpenAI output is run through ``html.escape`` first so any
-# literal angle brackets in the transcript don't break Telegram's HTML
-# parse.
-_REPLY_TEMPLATE = (
-    "Summary:\n<i>{summary}</i>\n<i>{emotion}</i>\n\n"
+# Long-memo reply: summary + emotion read share one blockquote; the
+# transcript gets its own. Free-form OpenAI output is ``html.escape``-d
+# before interpolation so literal angle brackets in the transcript or
+# summary don't break Telegram's HTML parse.
+_LONG_REPLY_TEMPLATE = (
+    "Summary & Vibe:\n<blockquote>{summary}\n{emotion}</blockquote>\n\n"
     "Transcript:\n<blockquote>{transcript}</blockquote>"
 )
+# Short-memo reply: just the transcript in a blockquote.
+_SHORT_REPLY_TEMPLATE = "Voice-to-text:\n<blockquote>{transcript}</blockquote>"
 
 _ERROR_TOO_LONG = "That voice memo is over the 10-minute limit. Try sending a shorter one."
 _ERROR_TOO_LARGE = "That voice memo is too large to transcribe. Try sending a shorter one."
@@ -108,6 +113,12 @@ class _BackgroundContext:
     transcriber: VoiceTranscriber | None
     job_storage: VoiceJobStorage | None
     persistence_record_event: Callable[[EventRecord], None] | None
+    # Message id of the "Transcribing your voice memo…" ack, if the
+    # ack send succeeded. The background task edits this message in
+    # place with the final reply instead of double-posting (#56). When
+    # ``None`` the edit path is skipped and we fall back to a fresh
+    # ``send_message``.
+    ack_message_id: int | None = None
 
 
 class VoiceTranscriptionHandler:
@@ -164,12 +175,17 @@ class VoiceTranscriptionHandler:
                 )
             return HandlerResult(handled=True, handler_name=self.name)
 
+        ack_message_id: int | None = None
         try:
-            await telegram_client.send_message(
+            ack_response = await telegram_client.send_message(
                 chat_id=update.chat_id,
                 text=ACK_TEXT,
                 reply_to_message_id=update.message_id,
             )
+            if isinstance(ack_response, dict):
+                raw_id = ack_response.get("message_id")
+                if isinstance(raw_id, int):
+                    ack_message_id = raw_id
         except TelegramSendError as exc:
             _logger.warning(
                 "voice_transcription_ack_failed",
@@ -199,6 +215,7 @@ class VoiceTranscriptionHandler:
             persistence_record_event=(
                 ctx.persistence.record_event if ctx.persistence is not None else None
             ),
+            ack_message_id=ack_message_id,
         )
         self._schedule(_run_background(bg))
 
@@ -287,11 +304,18 @@ async def _run_background(ctx: _BackgroundContext) -> None:
             error_message = str(exc)
             user_facing_error = _ERROR_TRANSCRIPTION_FAILED
 
-    if user_facing_error is None and transcript is not None:
+    # Skip the OpenAI chat analyze call for short memos (#56). For
+    # anything over the threshold we run the summary + emotion read.
+    needs_analysis = (
+        user_facing_error is None
+        and transcript is not None
+        and ctx.voice.duration > SHORT_DURATION_THRESHOLD_SECONDS
+    )
+    if needs_analysis:
         assert ctx.transcriber is not None
         await _safe_status(ctx.job_storage, job_id, "analyzing")
         try:
-            analysis = await ctx.transcriber.analyze(transcript)
+            analysis = await ctx.transcriber.analyze(transcript)  # type: ignore[arg-type]
         except AnalysisError as exc:
             error_class = type(exc).__name__
             error_message = str(exc)
@@ -300,35 +324,18 @@ async def _run_background(ctx: _BackgroundContext) -> None:
             summary = analysis.summary
             emotion = analysis.emotion
 
-    if (
-        user_facing_error is None
-        and transcript is not None
-        and summary is not None
-        and emotion is not None
-    ):
+    if user_facing_error is None and transcript is not None:
         await _safe_status(ctx.job_storage, job_id, "sending")
-        reply_text = _REPLY_TEMPLATE.format(
-            summary=html.escape(summary),
-            emotion=html.escape(emotion),
-            transcript=html.escape(transcript),
-        )
+        reply_text = _compose_reply(transcript, summary, emotion)
         try:
-            sent = await ctx.telegram_client.send_message(
-                chat_id=ctx.chat_id,
-                text=reply_text,
-                reply_to_message_id=ctx.message_id,
-                parse_mode=REPLY_PARSE_MODE,
-            )
-            telegram_reply_message_id = (
-                int(sent["message_id"]) if isinstance(sent, dict) and "message_id" in sent else None
-            )
+            telegram_reply_message_id = await _deliver_reply(ctx, reply_text)
         except TelegramSendError as exc:
             error_class = type(exc).__name__
             error_message = str(exc)
             user_facing_error = _ERROR_GENERIC
 
     if user_facing_error is None and transcript is not None:
-        assert summary is not None and emotion is not None and object_key is not None
+        assert object_key is not None
         if job_id is not None and ctx.job_storage is not None:
             try:
                 await ctx.job_storage.mark_succeeded(
@@ -354,11 +361,7 @@ async def _run_background(ctx: _BackgroundContext) -> None:
     # Failure path.
     if user_facing_error is not None:
         with contextlib.suppress(TelegramSendError):
-            await ctx.telegram_client.send_message(
-                chat_id=ctx.chat_id,
-                text=user_facing_error,
-                reply_to_message_id=ctx.message_id,
-            )
+            await _deliver_reply(ctx, user_facing_error, parse_mode=None)
         if job_id is not None and ctx.job_storage is not None:
             try:
                 await ctx.job_storage.mark_failed(
@@ -375,6 +378,66 @@ async def _run_background(ctx: _BackgroundContext) -> None:
             details=f"{error_class}: {error_message}",
             occurred_at=datetime.now(UTC),
         )
+
+
+def _compose_reply(
+    transcript: str,
+    summary: str | None,
+    emotion: str | None,
+) -> str:
+    """Pick the long or short template based on whether we ran analysis."""
+    escaped_transcript = html.escape(transcript)
+    if summary is not None and emotion is not None:
+        return _LONG_REPLY_TEMPLATE.format(
+            summary=html.escape(summary),
+            emotion=html.escape(emotion),
+            transcript=escaped_transcript,
+        )
+    return _SHORT_REPLY_TEMPLATE.format(transcript=escaped_transcript)
+
+
+async def _deliver_reply(
+    ctx: _BackgroundContext,
+    text: str,
+    *,
+    parse_mode: str | None = REPLY_PARSE_MODE,
+) -> int | None:
+    """Edit the ack message with ``text``; fall back to a fresh send.
+
+    Returns the message id the user sees, when known. Raises
+    :class:`TelegramSendError` only if both the edit and the fallback
+    send fail — callers wrap accordingly.
+    """
+    if ctx.ack_message_id is not None:
+        try:
+            edited = await ctx.telegram_client.edit_message_text(
+                chat_id=ctx.chat_id,
+                message_id=ctx.ack_message_id,
+                text=text,
+                parse_mode=parse_mode,
+            )
+            if isinstance(edited, dict) and isinstance(edited.get("message_id"), int):
+                return int(edited["message_id"])
+            return ctx.ack_message_id
+        except TelegramSendError as exc:
+            _logger.warning(
+                "voice_transcription_edit_failed_falling_back_to_send",
+                extra={
+                    "chat_id": ctx.chat_id,
+                    "ack_message_id": ctx.ack_message_id,
+                    "error": f"{type(exc).__name__}: {exc}",
+                },
+            )
+
+    sent = await ctx.telegram_client.send_message(
+        chat_id=ctx.chat_id,
+        text=text,
+        reply_to_message_id=ctx.message_id,
+        parse_mode=parse_mode,
+    )
+    if isinstance(sent, dict) and isinstance(sent.get("message_id"), int):
+        return int(sent["message_id"])
+    return None
 
 
 def _ext_for_mime(mime_type: str | None) -> str:
