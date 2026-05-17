@@ -99,6 +99,9 @@ jobs:
         #   - TELEGRAM_BOT_TOKEN     (used by TelegramClient.send_message, #15)
         #   - TELEGRAM_QA_USERS      (parsed into the QA allowlist, #15)
         #   - OPENAI_API_KEY         (used by the OpenAI fallback handler, #23)
+        #   - POSTGRES_DSN           (shared Cloud SQL connection string, #31; secret may
+        #                             not yet exist in fresh deploys — set --set-secrets to
+        #                             drop the entry if absent)
         # Each --set-secrets value must already have at least one Secret
         # Manager version or the deploy will fail.
         run: |
@@ -107,7 +110,7 @@ jobs:
             --region="${REGION}" \
             --image="${{ steps.image.outputs.sha_tag }}" \
             --service-account="${RUNTIME_SA}" \
-            --set-secrets="TELEGRAM_WEBHOOK_SECRET=telegram-webhook-secret-default:latest,TELEGRAM_BOT_TOKEN=telegram-bot-token-default:latest,TELEGRAM_QA_USERS=telegram-qa-users:latest,OPENAI_API_KEY=OPENAI_API_KEY:latest" \
+            --set-secrets="TELEGRAM_WEBHOOK_SECRET=telegram-webhook-secret-default:latest,TELEGRAM_BOT_TOKEN=telegram-bot-token-default:latest,TELEGRAM_QA_USERS=telegram-qa-users:latest,OPENAI_API_KEY=OPENAI_API_KEY:latest,POSTGRES_DSN=POSTGRES_DSN:latest" \
             --set-env-vars="SCHEDULER_SERVICE_ACCOUNT_EMAIL=something-bot-scheduler-sa@${PROJECT_ID}.iam.gserviceaccount.com" \
             --quiet
 

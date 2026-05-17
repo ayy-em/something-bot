@@ -106,6 +106,26 @@ class Settings(BaseSettings):
         ),
     )
 
+    # --- Shared Postgres (#31) ---
+    postgres_dsn: SecretStr | None = Field(
+        default=None,
+        description=(
+            "Connection string for the shared Cloud SQL Postgres instance hosting "
+            "the something-bot schema (#31). When unset, the Postgres wrapper "
+            "is not built and any call site that depends on it gracefully "
+            "no-ops. Format: postgres://<user>:<pass>@<host>:5432/<db>?sslmode=require "
+            "(or the Cloud SQL Auth Proxy unix socket form: "
+            "postgres://<user>:<pass>@/<db>?host=/cloudsql/<project>:<region>:<instance>)."
+        ),
+    )
+    postgres_schema: str = Field(
+        default="something_bot",
+        description=(
+            "Postgres schema the bot writes to inside the shared DB (#31). Created "
+            "on first connection if missing (CREATE SCHEMA IF NOT EXISTS)."
+        ),
+    )
+
     @field_validator("telegram_qa_user_ids", mode="before")
     @classmethod
     def _parse_qa_users(cls, raw: Any) -> Any:
