@@ -51,19 +51,21 @@ user gets one clear rejection reply and that's it.
 ## Reply format
 
 ```
-Your transcript.
-
 Summary:
-<1-3 sentence factual summary>
-<1 sentence emotion read>
+<i><1-3 sentence factual summary></i>
+<i><1 sentence emotion read></i>
 
 Transcript:
-<full transcript>
+<i><full transcript></i>
 ```
 
-Summary and emotion live on adjacent lines, no blank line between them,
-because the emotion read is a one-liner extension of the summary in
-practice.
+Sent with `parse_mode="HTML"`. Summary content, emotion read, and the
+transcript are wrapped in `<i>` — labels stay plain. Free-form OpenAI
+output is `html.escape`-d before interpolation so a stray `<` in a
+transcript doesn't break the HTML parse.
+
+Summary and emotion sit on adjacent lines (no blank line between) — the
+emotion read is a one-liner extension of the summary in practice.
 
 ## Error matrix
 

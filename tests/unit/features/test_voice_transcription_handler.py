@@ -92,7 +92,7 @@ class _FakeTelegram:
     send_message_raises: BaseException | None = None
     reaction_raises: BaseException | None = None
 
-    async def send_message(self, chat_id, text, *, reply_to_message_id=None):
+    async def send_message(self, chat_id, text, *, reply_to_message_id=None, parse_mode=None):
         if self.send_message_raises is not None:
             raise self.send_message_raises
         self.sent_messages.append(
@@ -100,6 +100,7 @@ class _FakeTelegram:
                 "chat_id": chat_id,
                 "text": text,
                 "reply_to_message_id": reply_to_message_id,
+                "parse_mode": parse_mode,
             }
         )
         return {"message_id": 9001}
@@ -278,12 +279,14 @@ async def test_happy_path_private() -> None:
     assert len(telegram.sent_messages) == 2
 
     final = telegram.sent_messages[1]["text"]
-    assert "Summary:" in final
-    assert "A friendly greeting." in final
-    assert "The speaker sounds cheerful." in final
+    # Reply leads with "Summary:" — the old "Your transcript." preamble is gone.
+    assert final.startswith("Summary:")
+    assert "<i>A friendly greeting.</i>" in final
+    assert "<i>The speaker sounds cheerful.</i>" in final
     assert "Transcript:" in final
-    assert "Hello there." in final
+    assert "<i>Hello there.</i>" in final
     assert telegram.sent_messages[1]["reply_to_message_id"] == 42
+    assert telegram.sent_messages[1]["parse_mode"] == "HTML"
 
     # GCS upload happened with the expected key shape
     assert len(gcs.uploads) == 1

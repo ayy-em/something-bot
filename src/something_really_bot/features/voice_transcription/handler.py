@@ -15,6 +15,7 @@ message instead of leaking SDK errors.
 
 import asyncio
 import contextlib
+import html
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -61,8 +62,13 @@ MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024
 
 ACK_REACTION = "👀"
 ACK_TEXT = "Transcribing your voice memo…"
+REPLY_PARSE_MODE = "HTML"
 
-_REPLY_TEMPLATE = "Your transcript.\n\nSummary:\n{summary}\n{emotion}\n\nTranscript:\n{transcript}"
+# Summary text + emotion read are wrapped in <i>; ditto the transcript.
+# Free-form OpenAI output is run through ``html.escape`` first so any
+# literal angle brackets in the transcript don't break Telegram's HTML
+# parse.
+_REPLY_TEMPLATE = "Summary:\n<i>{summary}</i>\n<i>{emotion}</i>\n\nTranscript:\n<i>{transcript}</i>"
 
 _ERROR_TOO_LONG = "That voice memo is over the 10-minute limit. Try sending a shorter one."
 _ERROR_TOO_LARGE = "That voice memo is too large to transcribe. Try sending a shorter one."
@@ -298,15 +304,16 @@ async def _run_background(ctx: _BackgroundContext) -> None:
     ):
         await _safe_status(ctx.job_storage, job_id, "sending")
         reply_text = _REPLY_TEMPLATE.format(
-            summary=summary,
-            emotion=emotion,
-            transcript=transcript,
+            summary=html.escape(summary),
+            emotion=html.escape(emotion),
+            transcript=html.escape(transcript),
         )
         try:
             sent = await ctx.telegram_client.send_message(
                 chat_id=ctx.chat_id,
                 text=reply_text,
                 reply_to_message_id=ctx.message_id,
+                parse_mode=REPLY_PARSE_MODE,
             )
             telegram_reply_message_id = (
                 int(sent["message_id"]) if isinstance(sent, dict) and "message_id" in sent else None
