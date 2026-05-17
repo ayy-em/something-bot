@@ -67,3 +67,76 @@ async def test_send_message_does_not_log_token(caplog: pytest.LogCaptureFixture)
 
     for record in caplog.records:
         assert "super-secret-token" not in record.getMessage()
+
+
+async def test_send_message_includes_reply_parameters() -> None:
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(200, json={"ok": True, "result": {"message_id": 7}})
+
+    client = _client_with_handler(handler)
+
+    await client.send_message(chat_id=42, text="hi", reply_to_message_id=99)
+
+    assert captured["body"]["reply_parameters"] == {
+        "message_id": 99,
+        "allow_sending_without_reply": True,
+    }
+
+
+async def test_set_message_reaction_posts_expected_body() -> None:
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["url"] = str(request.url)
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(200, json={"ok": True, "result": True})
+
+    client = _client_with_handler(handler)
+
+    await client.set_message_reaction(chat_id=1, message_id=2, emoji="👀")
+
+    assert captured["url"].endswith("/setMessageReaction")
+    assert captured["body"] == {
+        "chat_id": 1,
+        "message_id": 2,
+        "reaction": [{"type": "emoji", "emoji": "👀"}],
+    }
+
+
+async def test_send_video_uploads_multipart(tmp_path) -> None:
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["url"] = str(request.url)
+        captured["content_type"] = request.headers.get("content-type", "")
+        captured["body"] = request.content
+        return httpx.Response(200, json={"ok": True, "result": {"message_id": 333}})
+
+    client = _client_with_handler(handler)
+
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(b"\x00\x01\x02\x03fake")
+
+    result = await client.send_video(
+        chat_id=42,
+        video_path=video,
+        reply_to_message_id=99,
+        duration_seconds=12,
+    )
+
+    assert captured["url"].endswith("/sendVideo")
+    assert "multipart/form-data" in captured["content_type"]
+    # The chat id, reply parameters, duration, and the file bytes all appear
+    # somewhere in the multipart body.
+    body = captured["body"]
+    assert b'name="chat_id"' in body
+    assert b"42" in body
+    assert b'name="reply_parameters"' in body
+    assert b'"message_id": 99' in body
+    assert b'name="duration"' in body
+    assert b"12" in body
+    assert b"\x00\x01\x02\x03fake" in body
+    assert result == {"message_id": 333}

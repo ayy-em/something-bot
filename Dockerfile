@@ -25,6 +25,14 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PATH="/app/.venv/bin:$PATH" \
     PORT=8080
 
+# ffmpeg is required by yt-dlp post-processing for the video downloader
+# (#42): Reels/TikToks often arrive as separate audio + video streams
+# that ffmpeg muxes into a single MP4.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ffmpeg \
+ && apt-get clean \
+ && rm -rf /var/lib/apt/lists/*
+
 RUN groupadd --system --gid 1001 app \
  && useradd  --system --uid 1001 --gid app --home /app --shell /usr/sbin/nologin app
 

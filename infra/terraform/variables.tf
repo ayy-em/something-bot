@@ -55,10 +55,14 @@ variable "cloudrun_settings" {
     max_instances   = number
   })
   default = {
-    cpu             = "1"
-    memory          = "512Mi"
-    timeout_seconds = 60
-    concurrency     = 80
+    # Bumped from 1 CPU / 512 MiB / 60s / 80 for #42 (video downloader):
+    # yt-dlp can buffer 50 MiB of video plus ffmpeg muxing, downloads take
+    # up to a minute, and we don't want one in-flight download to starve
+    # other webhook traffic — so per-instance concurrency goes down too.
+    cpu             = "2"
+    memory          = "2Gi"
+    timeout_seconds = 300
+    concurrency     = 8
     min_instances   = 0
     max_instances   = 3
   }

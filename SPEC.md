@@ -523,6 +523,79 @@ or equivalent.
 
 ---
 
+## 6.11 Video Downloader (#42)
+
+The bot fetches Instagram Reels and TikTok videos that appear as URLs in
+incoming text messages (private chats, groups, supergroups) and replies
+with the video pinned to the trigger message. This is a webhook-driven
+feature, not a scheduled job — see `src/something_really_bot/features/video_downloader/README.md`
+for the full flow, error matrix, and Postgres schema.
+
+### URL detection
+
+Matched anywhere in the text:
+
+* Instagram: `instagram.com/reel/<id>`, `instagram.com/reels/<id>`
+* TikTok: `tiktok.com/@user/video/<id>`, `vm.tiktok.com/<id>`, `vt.tiktok.com/<id>`, `tiktok.com/t/<id>`
+
+Profile pages and discover pages are intentionally excluded. If both
+platforms appear, Instagram wins.
+
+### Download model
+
+`yt-dlp` (sync, run inside `asyncio.to_thread`) downloads to a per-job
+tempdir; `ffmpeg` is bundled into the runtime image for muxing. A 50 MiB
+`max_filesize` is enforced at the yt-dlp layer because that's Telegram's
+`sendVideo` ceiling for bots. Public videos only — private/login-walled
+Reels are out of scope.
+
+### Async model
+
+The webhook acks Telegram immediately:
+
+1. Send a short "Link received, fetching the {Instagram|TikTok} video…"
+   reply pinned to the trigger message.
+2. Stamp a 👀 reaction on the trigger message (best-effort; group chats
+   sometimes restrict bot reactions).
+3. Schedule the actual download/upload/send as an `asyncio.create_task`
+   so the FastAPI webhook returns 200 to Telegram before the heavy
+   work starts.
+
+This requires Cloud Run with `cpu-always-on` (i.e. the existing
+service-side setting) so the background task isn't paused after the
+HTTP response.
+
+### Persistence
+
+One row per attempt in `public.video_download_jobs`. The table lives in
+`public` rather than the bot's `something_bot` schema per operator
+direction; the storage module bypasses
+`PostgresStorage`'s auto-schema-qualification by issuing raw SQL.
+Status lifecycle: `pending → downloading → uploading → sending → succeeded`
+(or `failed` at any step, with `error_class`/`error_message`).
+
+### Error reporting
+
+All failures map to a single user-visible reply (see feature README for
+the matrix). TikTok's anti-scraping is the dominant failure mode, so
+the message names the platform explicitly instead of looking like a
+generic bot bug.
+
+### Cloud Run resource implications
+
+The Cloud Run service defaults are bumped to 2 vCPU / 2 GiB / 300 s
+timeout / concurrency 8 in `infra/terraform/variables.tf` to fit
+`yt-dlp` + `ffmpeg` + a 50 MiB upload. The runtime image installs
+`ffmpeg` from apt; `yt-dlp` ships as a runtime Python dep.
+
+### Out of scope (backlog)
+
+* Authenticated cookie jar for private Instagram Reels.
+* Resumable / chunked uploads for >50 MB sources.
+* Re-encoding to squeeze borderline-too-large clips under the limit.
+
+---
+
 ## 7. Scheduled Jobs
 
 Cron-style work runs via Cloud Scheduler hitting `POST /jobs/{name}` on Cloud Run (#22). Each job is a `JobHandler` registered in `main.py`; the scheduler is defined in `infra/terraform/scheduler.tf` (one entry per job). OIDC verification on the route ensures only the scheduler SA can invoke it.

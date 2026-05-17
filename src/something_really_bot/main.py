@@ -34,6 +34,9 @@ from something_really_bot.features.finco_daily_stats.handler import FinCoDailySt
 from something_really_bot.features.hello_world.handler import HelloWorldHandler
 from something_really_bot.features.openai_fallback.handler import OpenAIFallbackHandler
 from something_really_bot.features.tiktok_reminder.handler import TikTokReminderJob
+from something_really_bot.features.video_downloader.handler import (
+    get_video_downloader_handler,
+)
 from something_really_bot.file_storage.fetcher import get_file_fetcher
 from something_really_bot.logging import configure_logging, get_logger
 from something_really_bot.persistence import (
@@ -81,6 +84,9 @@ def build_default_dispatcher() -> Dispatcher:
     dispatcher.register(StartCommandHandler())
     dispatcher.register(HelpCommandHandler(HelpRegistry(lambda: dispatcher.handlers)))
     dispatcher.register(FileStorageHandler())
+    # Video downloader must precede the OpenAI fallback so a Reel/TikTok
+    # URL in plain text doesn't get routed to the LLM.
+    dispatcher.register(get_video_downloader_handler())
     dispatcher.register(HelloWorldHandler())  # gated by settings.hello_world_mode
     dispatcher.register(OpenAIFallbackHandler())
     dispatcher.register(PingHandler())
