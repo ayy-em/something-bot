@@ -28,6 +28,8 @@ class HelloWorldHandler:
     """Parrots back text messages from authorized QA users."""
 
     name = "hello_world.parrot"
+    description = "Parrot mode for QA users (only active when HELLO_WORLD_MODE=true)."
+    help_usage = "Send a text message"
 
     def matches(self, update: ParsedUpdate, ctx: BotContext) -> bool:
         if not ctx.settings.hello_world_mode:
