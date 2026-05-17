@@ -38,6 +38,12 @@ variable "telegram_files_bucket_name" {
   default     = "something-bot-telegram-files"
 }
 
+variable "openai_context_bucket_name" {
+  description = "GCS bucket holding the persistent .md context files prepended to OpenAI completions (#26). Synced from the developer's machine via scripts/context-sync.sh."
+  type        = string
+  default     = "something-bot-openai-context"
+}
+
 variable "cloudrun_settings" {
   description = "Cloud Run runtime knobs. Defaults encode the Cloud Run Settings RFC for SPEC §18.3."
   type = object({

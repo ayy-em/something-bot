@@ -1,0 +1,39 @@
+# OpenAI persistent context
+
+This directory holds the markdown files that are prepended to every
+OpenAI chat completion the bot makes (#26). They are **never
+committed** — the directory contents are gitignored except for this
+example.
+
+## Flow
+
+```
+local-context/*.md  ──(scripts/context-sync.sh push)──►  gs://something-bot-openai-context/context/
+                                                              │
+                                                              ▼
+                                                  Cloud Run on each /webhook
+                                                  prepends each file as a
+                                                  {"role": "system"} message
+```
+
+## Conventions
+
+- One topic per file. Suggested starters:
+  - `personal_facts.md` — facts about the user(s) the bot should know.
+  - `project_state.md` — current state of ongoing work.
+  - `terminology.md` — terms / acronyms / aliases the bot should resolve.
+- Keep it under 32 KiB total — the loader truncates beyond that and
+  logs a warning.
+- Pull before editing on a new machine, push after each change:
+
+  ```sh
+  scripts/context-sync.sh pull
+  $EDITOR local-context/personal_facts.md
+  scripts/context-sync.sh push
+  ```
+
+## Why .gitignored
+
+Personal context, not appropriate for a public-ish repo history. Loss
+of a file in this directory is non-fatal — versioning is enabled on
+the bucket, so a `pull` will recover prior versions.
