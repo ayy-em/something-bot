@@ -95,3 +95,15 @@ variable "openai_api_key_secret_name" {
   type        = string
   default     = "OPENAI_API_KEY"
 }
+
+variable "postgres_dsn_secret_name" {
+  description = "Existing Secret Manager secret holding the DSN of the shared Cloud SQL Postgres instance (#31). The instance lives in a different GCP project; cross-project roles/cloudsql.client on the Cloud Run runtime SA is granted on the owning project, not here."
+  type        = string
+  default     = "POSTGRES_DSN"
+}
+
+variable "postgres_instance_secret_name" {
+  description = "Existing Secret Manager secret holding the Cloud SQL instance connection name (`project:region:instance`) for the shared Postgres instance (#31). Consumed by --add-cloudsql-instances on the Cloud Run deploy step and by PostgresStorage to route through the Auth Proxy socket."
+  type        = string
+  default     = "POSTGRES_INSTANCE"
+}

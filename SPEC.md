@@ -398,6 +398,62 @@ Personal usage / very small scale. Design should be clean but not absurdly over-
 
 ---
 
+## 6.8.1 Shared Postgres Persistence
+
+Some bot features require relational primitives that BigQuery is a poor fit for (small mutable state, lookups by primary key, ad-hoc joins). For these cases the bot connects to a **shared Cloud SQL Postgres instance** that lives in a separate GCP project, used by multiple internal tools.
+
+All bot tables live under a dedicated schema (default `something_bot`) so the bot never touches other tenants' tables in the shared database.
+
+### Connection Model
+
+The bot does not whitelist Cloud Run egress IPs. Instead it uses the Cloud SQL Auth Proxy:
+
+* The deploy step passes the Cloud SQL instance connection name to `gcloud run deploy --add-cloudsql-instances`, which causes Cloud Run to mount the Auth Proxy unix socket at `/cloudsql/<instance-connection-name>/` in the container filesystem.
+* The runtime service account authenticates to the Auth Proxy via IAM (`roles/cloudsql.client` on the project that owns the instance — granted out-of-band because Terraform here only manages the bot's own project).
+* The Postgres wrapper overrides psycopg's `host` connection argument with the socket path whenever the instance connection name is present in the runtime environment, so the same DSN works for local TCP development and for socket-based Cloud Run runs.
+
+No long-lived database credentials traverse the network in plaintext; psycopg connects to the local socket and the Auth Proxy handles TLS to Cloud SQL on the bot's behalf.
+
+### Required Secrets
+
+Two Secret Manager secrets in the bot's GCP project drive the wiring:
+
+* A DSN secret holding the bot's database user, password and database name. Host:port in the DSN is ignored at runtime when the socket override is active and is only used for local TCP development.
+* An instance connection name secret holding the canonical `project:region:instance` triple. Consumed both at deploy time (to mount the Auth Proxy socket) and at runtime (to point psycopg at the socket).
+
+The runtime service account is granted `roles/secretmanager.secretAccessor` on both. The deployer service account is granted access only to the instance connection name secret, so the deploy workflow can read it on the runner without also being able to read the DSN.
+
+### Database User Model
+
+The bot uses a dedicated database user inside the shared instance with the minimum privileges needed:
+
+* `USAGE` on the schemas it accesses.
+* Appropriate DML (`SELECT`, `INSERT`, `UPDATE`, `DELETE`) on those schemas.
+* `CREATE` on the database is optional and only required if `ensure_schema()` is expected to create the bot's schema on first run; otherwise the schema is pre-created out-of-band.
+
+The bot must never assume superuser-level privileges and must not attempt cross-tenant access in the shared instance.
+
+### Wrapper Requirements
+
+A single async-friendly wrapper isolates psycopg behind a narrow interface:
+
+* `ensure_schema()` — idempotent `CREATE SCHEMA IF NOT EXISTS` for the bot's schema.
+* `execute(sql, params)` — non-returning statement.
+* `fetch_all(sql, params)` — returns a list of dicts keyed by column name.
+* `insert_row(table, row)` — schema-qualified insert; identifiers are validated against an allowlist of characters before interpolation.
+
+All driver errors funnel into a single exception type so call sites can apply the §6.9 "never bubble to Telegram" rule uniformly. The synchronous psycopg driver runs inside `asyncio.to_thread` so the FastAPI event loop stays free.
+
+### Acceptance Criteria
+
+* Cloud Run routes to Postgres via the Cloud SQL Auth Proxy socket, not over public IP.
+* DSN and instance connection name are sourced from Secret Manager and never hardcoded.
+* The runtime SA has `roles/cloudsql.client` on the owning project and `secretAccessor` on both secrets; cross-project IAM is documented as a manual step.
+* The wrapper exposes a small async API and converts driver failures into a single bot-level exception type.
+* Wrapper behavior (including the socket host override) is covered by tests using fakes/mocks — no real DB required.
+
+---
+
 ## 6.9 Branching / Routing Logic
 
 The bot must contain clear branching logic for deciding how each update should be handled.
@@ -535,7 +591,12 @@ QA_TELEGRAM_USER_IDS
 GCP_PROJECT_ID
 BIGQUERY_DATASET
 GCS_BUCKET
+OPENAI_API_KEY
+POSTGRES_DSN
+POSTGRES_INSTANCE
 ```
+
+`POSTGRES_DSN` and `POSTGRES_INSTANCE` together drive the shared Cloud SQL connection described in §6.8.1: the DSN supplies user/password/database; the instance connection name is read at deploy time (passed to `--add-cloudsql-instances`) and at runtime (used to mount the Auth Proxy socket and override the DSN host). The instance secret is also readable by the deployer SA so the deploy workflow can pass it to `gcloud`.
 
 Exact naming can be adjusted, but must be documented.
 

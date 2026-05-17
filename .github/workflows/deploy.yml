@@ -96,12 +96,29 @@ jobs:
             ${{ steps.image.outputs.latest_tag }}
           provenance: false
 
+      - name: Resolve Cloud SQL instance connection name
+        # POSTGRES_INSTANCE holds "project:region:instance" for the shared
+        # Cloud SQL DB (#31). We read the latest version here so we can
+        # pass it to --add-cloudsql-instances; the runtime *also* gets it
+        # as an env var via --set-secrets so PostgresStorage can route
+        # through the Auth Proxy socket at /cloudsql/<conn>/.
+        id: cloudsql
+        run: |
+          conn=$(gcloud secrets versions access latest \
+            --project="${PROJECT_ID}" --secret=POSTGRES_INSTANCE)
+          echo "::add-mask::${conn}"
+          echo "connection=${conn}" >> "$GITHUB_OUTPUT"
+
       - name: Deploy to Cloud Run
         # Secrets injected as env vars at this point:
         #   - TELEGRAM_WEBHOOK_SECRET (validated by the /webhook handler, #12)
         #   - TELEGRAM_BOT_TOKEN     (used by TelegramClient.send_message, #15)
         #   - TELEGRAM_QA_USERS      (parsed into the QA allowlist, #15)
         #   - OPENAI_API_KEY         (used by the OpenAI fallback handler, #23)
+        #   - POSTGRES_DSN           (shared Cloud SQL connection string, #31)
+        #   - POSTGRES_INSTANCE      (Cloud SQL instance conn name, #31;
+        #                             also passed to --add-cloudsql-instances
+        #                             so Cloud Run mounts the Auth Proxy socket)
         # Each --set-secrets value must already have at least one Secret
         # Manager version or the deploy will fail.
         run: |
@@ -110,7 +127,8 @@ jobs:
             --region="${REGION}" \
             --image="${{ steps.image.outputs.sha_tag }}" \
             --service-account="${RUNTIME_SA}" \
-            --set-secrets="TELEGRAM_WEBHOOK_SECRET=telegram-webhook-secret-default:latest,TELEGRAM_BOT_TOKEN=telegram-bot-token-default:latest,TELEGRAM_QA_USERS=telegram-qa-users:latest,OPENAI_API_KEY=OPENAI_API_KEY:latest" \
+            --add-cloudsql-instances="${{ steps.cloudsql.outputs.connection }}" \
+            --set-secrets="TELEGRAM_WEBHOOK_SECRET=telegram-webhook-secret-default:latest,TELEGRAM_BOT_TOKEN=telegram-bot-token-default:latest,TELEGRAM_QA_USERS=telegram-qa-users:latest,OPENAI_API_KEY=OPENAI_API_KEY:latest,POSTGRES_DSN=POSTGRES_DSN:latest,POSTGRES_INSTANCE=POSTGRES_INSTANCE:latest" \
             --set-env-vars="SCHEDULER_SERVICE_ACCOUNT_EMAIL=something-bot-scheduler-sa@${PROJECT_ID}.iam.gserviceaccount.com,OPENAI_CONTEXT_BUCKET=something-bot-openai-context" \
             --quiet
 
