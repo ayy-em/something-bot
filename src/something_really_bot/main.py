@@ -38,6 +38,7 @@ from something_really_bot.features.hello_world.handler import HelloWorldHandler
 from something_really_bot.features.make_sticker.handler import (
     get_make_sticker_handler,
 )
+from something_really_bot.features.ocr.handler import get_ocr_handler
 from something_really_bot.features.openai_fallback.handler import OpenAIFallbackHandler
 from something_really_bot.features.tiktok_reminder.handler import TikTokReminderJob
 from something_really_bot.features.video_downloader.handler import (
@@ -96,10 +97,13 @@ def build_default_dispatcher() -> Dispatcher:
     dispatcher = Dispatcher()
     dispatcher.register(StartCommandHandler())
     dispatcher.register(HelpCommandHandler(HelpRegistry(lambda: dispatcher.handlers)))
-    # /make-sticker (#44) must precede FileStorageHandler: when a user
-    # is mid-flow, their next photo belongs to the sticker pipeline,
-    # not the generic file-to-GCS dump.
+    # /make-sticker (#44) and /ocr (#45) must precede FileStorageHandler:
+    # when a user is mid-flow, their next photo belongs to the right
+    # pipeline, not the generic file-to-GCS dump. Each handler matches
+    # only when its own pending action is set, so they never both
+    # claim the same photo.
     dispatcher.register(get_make_sticker_handler())
+    dispatcher.register(get_ocr_handler())
     dispatcher.register(FileStorageHandler())
     # Voice transcription owns voice content (#43); FileStorageHandler
     # above intentionally does not match VoiceContent.

@@ -740,6 +740,24 @@ transform internals, GCS layout, and error matrix.
 
 ---
 
+## 6.16 /ocr — Image OCR (#45)
+
+Two-turn command, **private chats only**. `/ocr` sets a pending action
+expecting an image; the next photo from the same user gets stored under
+`ocr_requests/`, sent to OpenAI vision (chat.completions with a base64
+`image_url` content part), and the extracted text comes back as a
+reply in italics. The model returns the sentinel `NO_TEXT` when nothing
+readable is found; the handler translates that to a friendly fallback.
+
+Same dispatch precedence story as `/make-sticker`: `OCRHandler`
+registers before `FileStorageHandler` so a photo with a live pending
+`/ocr` row goes to the OCR pipeline instead of the generic file dump.
+
+See `src/something_really_bot/features/ocr/README.md` for the OCR
+internals and error matrix.
+
+---
+
 ## 7. Scheduled Jobs
 
 Cron-style work runs via Cloud Scheduler hitting `POST /jobs/{name}` on Cloud Run (#22). Each job is a `JobHandler` registered in `main.py`; the scheduler is defined in `infra/terraform/scheduler.tf` (one entry per job). OIDC verification on the route ensures only the scheduler SA can invoke it.
