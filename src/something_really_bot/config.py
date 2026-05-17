@@ -125,6 +125,17 @@ class Settings(BaseSettings):
             "on first connection if missing (CREATE SCHEMA IF NOT EXISTS)."
         ),
     )
+    postgres_instance: SecretStr | None = Field(
+        default=None,
+        description=(
+            "Cloud SQL instance connection name (project:region:instance) for the "
+            "shared Postgres instance. When set, the Postgres wrapper routes psycopg "
+            "through the Cloud SQL Auth Proxy socket at /cloudsql/<value>/ by "
+            "overriding the host kwarg, regardless of what host:port the DSN "
+            "specifies. Unset locally so psycopg uses the DSN's host:port verbatim. "
+            "Treated as a secret so the value never lands in logs."
+        ),
+    )
 
     @field_validator("telegram_qa_user_ids", mode="before")
     @classmethod

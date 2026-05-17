@@ -143,3 +143,52 @@ async def test_driver_exception_funnels_to_postgres_error_and_rolls_back() -> No
     assert "connection lost" in str(excinfo.value)
     assert conn.rolled_back is True
     assert conn.closed is True
+
+
+def test_default_factory_passes_socket_host_when_instance_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When an instance connection name is configured, the wrapper must
+    override psycopg's `host` so the connection lands on the Cloud SQL
+    Auth Proxy socket instead of the DSN's host:port."""
+    calls: list[tuple[tuple, dict]] = []
+    fake_psycopg = type(
+        "FakePsycopg",
+        (),
+        {"connect": staticmethod(lambda *a, **kw: calls.append((a, kw)) or object())},
+    )
+    monkeypatch.setitem(__import__("sys").modules, "psycopg", fake_psycopg)
+
+    storage = PostgresStorage(
+        dsn=SecretStr("postgres://u:p@ignored:5432/db"),
+        instance_connection_name="proj:region:inst",
+    )
+    storage._default_factory()
+
+    assert calls == [
+        (
+            ("postgres://u:p@ignored:5432/db",),
+            {"autocommit": False, "host": "/cloudsql/proj:region:inst"},
+        )
+    ]
+
+
+def test_default_factory_omits_host_kwarg_when_no_instance(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Local development path: no instance set → psycopg uses the DSN
+    host:port verbatim, no host override."""
+    calls: list[tuple[tuple, dict]] = []
+    fake_psycopg = type(
+        "FakePsycopg",
+        (),
+        {"connect": staticmethod(lambda *a, **kw: calls.append((a, kw)) or object())},
+    )
+    monkeypatch.setitem(__import__("sys").modules, "psycopg", fake_psycopg)
+
+    storage = PostgresStorage(dsn=SecretStr("postgres://u:p@localhost:5432/db"))
+    storage._default_factory()
+
+    assert calls == [
+        (("postgres://u:p@localhost:5432/db",), {"autocommit": False})
+    ]

@@ -1,9 +1,23 @@
 """Tiny wrapper around the shared Cloud SQL Postgres instance (#31).
 
-The DB lives in a different GCP project; the bot connects with a DSN
-held in the ``POSTGRES_DSN`` Secret Manager secret. Cross-project IAM
-(``roles/cloudsql.client`` for the Cloud Run runtime SA) is granted
-out-of-band on the owning project — Terraform here can't manage it.
+The DB lives in a different GCP project. The bot connects via the Cloud
+SQL Auth Proxy: Cloud Run mounts the proxy socket at
+``/cloudsql/<instance-connection-name>/`` (configured by
+``gcloud run deploy --add-cloudsql-instances=<conn>``) and authenticates
+with the runtime SA's IAM, which holds ``roles/cloudsql.client`` on the
+owning project.
+
+Two secrets drive the wiring:
+
+- ``POSTGRES_DSN``     — psycopg connection string with the bot's
+  user/password/database. The host:port in the DSN is intentionally
+  **ignored at runtime**; it's there so the same DSN works for local
+  TCP connections during development.
+- ``POSTGRES_INSTANCE`` — Cloud SQL instance connection name
+  (``project:region:instance``). When present, the wrapper overrides
+  the DSN's host with ``/cloudsql/<POSTGRES_INSTANCE>`` so psycopg
+  routes through the Auth Proxy socket regardless of what the DSN says.
+  Unset locally → psycopg uses the DSN's host:port as-is.
 
 The wrapper is deliberately small:
 
@@ -47,10 +61,12 @@ class PostgresStorage:
         dsn: SecretStr,
         *,
         schema: str = "something_bot",
+        instance_connection_name: str | None = None,
         connection_factory: ConnectionFactory | None = None,
     ) -> None:
         self._dsn = dsn
         self._schema = schema
+        self._instance = instance_connection_name
         self._factory = connection_factory or self._default_factory
 
     @property
@@ -141,7 +157,13 @@ class PostgresStorage:
         # Deferred so test doubles don't need psycopg installed.
         import psycopg
 
-        return psycopg.connect(self._dsn.get_secret_value(), autocommit=False)
+        kwargs: dict[str, Any] = {"autocommit": False}
+        if self._instance:
+            # Route through the Cloud SQL Auth Proxy socket; psycopg
+            # kwargs override the host:port in the DSN string, so the
+            # same DSN works locally (TCP) and in Cloud Run (socket).
+            kwargs["host"] = f"/cloudsql/{self._instance}"
+        return psycopg.connect(self._dsn.get_secret_value(), **kwargs)
 
 
 def _is_safe_identifier(name: str) -> bool:
@@ -154,4 +176,13 @@ def get_postgres_storage() -> PostgresStorage | None:
     settings = get_settings()
     if settings.postgres_dsn is None:
         return None
-    return PostgresStorage(dsn=settings.postgres_dsn, schema=settings.postgres_schema)
+    instance = (
+        settings.postgres_instance.get_secret_value()
+        if settings.postgres_instance is not None
+        else None
+    )
+    return PostgresStorage(
+        dsn=settings.postgres_dsn,
+        schema=settings.postgres_schema,
+        instance_connection_name=instance,
+    )

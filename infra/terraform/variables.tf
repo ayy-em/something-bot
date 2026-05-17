@@ -95,3 +95,9 @@ variable "postgres_dsn_secret_name" {
   type        = string
   default     = "POSTGRES_DSN"
 }
+
+variable "postgres_instance_secret_name" {
+  description = "Existing Secret Manager secret holding the Cloud SQL instance connection name (`project:region:instance`) for the shared Postgres instance (#31). Consumed by --add-cloudsql-instances on the Cloud Run deploy step and by PostgresStorage to route through the Auth Proxy socket."
+  type        = string
+  default     = "POSTGRES_INSTANCE"
+}

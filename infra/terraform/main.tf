@@ -163,6 +163,11 @@ data "google_secret_manager_secret" "postgres_dsn" {
   secret_id = var.postgres_dsn_secret_name
 }
 
+data "google_secret_manager_secret" "postgres_instance" {
+  project   = var.project_id
+  secret_id = var.postgres_instance_secret_name
+}
+
 # --------------------------------------------------------------------------- #
 # Secret Manager — webhook secret placeholder per bot (value injected out-of-band)
 # --------------------------------------------------------------------------- #
@@ -225,6 +230,13 @@ resource "google_secret_manager_secret_iam_member" "cloudrun_postgres_dsn" {
   member    = "serviceAccount:${google_service_account.cloudrun.email}"
 }
 
+resource "google_secret_manager_secret_iam_member" "cloudrun_postgres_instance" {
+  project   = var.project_id
+  secret_id = data.google_secret_manager_secret.postgres_instance.secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.cloudrun.email}"
+}
+
 # --------------------------------------------------------------------------- #
 # Secret access for the deployer service account
 #
@@ -248,6 +260,17 @@ resource "google_secret_manager_secret_iam_member" "deployer_webhook_secret" {
 
   project   = var.project_id
   secret_id = google_secret_manager_secret.telegram_webhook_secret[each.key].secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.deployer.email}"
+}
+
+# The deploy workflow reads POSTGRES_INSTANCE on the runner so it can pass
+# the Cloud SQL connection name to `gcloud run deploy --add-cloudsql-instances`.
+# Bind the deployer SA explicitly rather than the runtime SA's binding above
+# so the two identities stay independently revocable.
+resource "google_secret_manager_secret_iam_member" "deployer_postgres_instance" {
+  project   = var.project_id
+  secret_id = data.google_secret_manager_secret.postgres_instance.secret_id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.deployer.email}"
 }
@@ -327,6 +350,7 @@ resource "google_cloud_run_v2_service" "main" {
     google_secret_manager_secret_iam_member.cloudrun_webhook_secret,
     google_secret_manager_secret_iam_member.cloudrun_openai,
     google_secret_manager_secret_iam_member.cloudrun_postgres_dsn,
+    google_secret_manager_secret_iam_member.cloudrun_postgres_instance,
     google_storage_bucket_iam_member.cloudrun_files,
   ]
 }
