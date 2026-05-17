@@ -9,7 +9,6 @@ from pydantic import SecretStr
 
 from something_really_bot.config import Settings
 from something_really_bot.features.commands.handler import (
-    HELP_REPLY,
     START_REPLY,
     HelpCommandHandler,
     StartCommandHandler,
@@ -72,23 +71,27 @@ def _supergroup_command(command: str) -> SupergroupMessage:
     )
 
 
-@pytest.mark.parametrize(
-    ("handler_cls", "command", "expected_reply"),
-    [
-        (StartCommandHandler, "/start", START_REPLY),
-        (HelpCommandHandler, "/help", HELP_REPLY),
-    ],
-)
-async def test_command_in_private_chat_returns_static_reply(
-    handler_cls: type, command: str, expected_reply: str
-) -> None:
-    handler = handler_cls()
+async def test_start_handler_returns_static_reply() -> None:
+    handler = StartCommandHandler()
 
-    result = await handler.handle(_private_command(command), _ctx())
+    result = await handler.handle(_private_command("/start"), _ctx())
 
     assert result.handled is True
-    assert result.handler_name == handler_cls.name
-    assert result.reply_text == expected_reply
+    assert result.handler_name == StartCommandHandler.name
+    assert result.reply_text == START_REPLY
+
+
+async def test_help_handler_returns_rendered_registry_body() -> None:
+    """``/help`` body comes from the injected HelpRegistry (#27)."""
+    handler = HelpCommandHandler()
+
+    result = await handler.handle(_private_command("/help"), _ctx())
+
+    assert result.handled is True
+    assert result.handler_name == HelpCommandHandler.name
+    # Default registry is empty → placeholder line is present.
+    assert "Here's what I can do:" in (result.reply_text or "")
+    assert "(no documented features yet)" in (result.reply_text or "")
 
 
 @pytest.mark.parametrize(
