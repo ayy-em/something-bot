@@ -89,3 +89,21 @@ variable "openai_api_key_secret_name" {
   type        = string
   default     = "OPENAI_API_KEY"
 }
+
+variable "alerts_email" {
+  description = "Email address that receives Cloud Monitoring alerts for the bot (#28). When empty, the email notification channel and the alert policy are skipped — the log-based metric still gets created so it accumulates a history."
+  type        = string
+  default     = ""
+}
+
+variable "alerts_error_threshold" {
+  description = "Trigger the bot-error-rate alert when the log-based metric exceeds this count in the rolling window (#28)."
+  type        = number
+  default     = 5
+}
+
+variable "alerts_error_window_seconds" {
+  description = "Rolling window over which alerts_error_threshold is evaluated, in seconds (#28). Default 300 = 5 minutes."
+  type        = number
+  default     = 300
+}
