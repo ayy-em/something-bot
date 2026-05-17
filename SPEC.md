@@ -758,6 +758,28 @@ internals and error matrix.
 
 ---
 
+## 6.17 /summarize — Document TL;DR (#46)
+
+Two-turn command, **private chats only**. `/summarize` sets a pending
+action expecting a document; the next document upload from the same
+user gets stored under `summarizer/`, run through the right text
+extractor (PyMuPDF for PDFs, `python-docx` for DOCX, plain UTF-8
+decode for TXT/MD/CSV/log), hard-capped at 60,000 characters, sent to
+OpenAI for a 3-6 sentence TL;DR, and replied to in italics. If the
+document was truncated, the reply gets an italic truncation notice
+appended.
+
+`SummarizeHandler` registers alongside `MakeStickerHandler` and
+`OCRHandler` before `FileStorageHandler`; the match guard
+(`pending.command == "summarize"`) ensures only one of the three claims
+any given upload.
+
+See `src/something_really_bot/features/summarize/README.md` for the
+extraction + summarization internals, error matrix, and scope
+restrictions.
+
+---
+
 ## 7. Scheduled Jobs
 
 Cron-style work runs via Cloud Scheduler hitting `POST /jobs/{name}` on Cloud Run (#22). Each job is a `JobHandler` registered in `main.py`; the scheduler is defined in `infra/terraform/scheduler.tf` (one entry per job). OIDC verification on the route ensures only the scheduler SA can invoke it.

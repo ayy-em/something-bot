@@ -40,6 +40,7 @@ from something_really_bot.features.make_sticker.handler import (
 )
 from something_really_bot.features.ocr.handler import get_ocr_handler
 from something_really_bot.features.openai_fallback.handler import OpenAIFallbackHandler
+from something_really_bot.features.summarize.handler import get_summarize_handler
 from something_really_bot.features.tiktok_reminder.handler import TikTokReminderJob
 from something_really_bot.features.video_downloader.handler import (
     get_video_downloader_handler,
@@ -97,13 +98,14 @@ def build_default_dispatcher() -> Dispatcher:
     dispatcher = Dispatcher()
     dispatcher.register(StartCommandHandler())
     dispatcher.register(HelpCommandHandler(HelpRegistry(lambda: dispatcher.handlers)))
-    # /make-sticker (#44) and /ocr (#45) must precede FileStorageHandler:
-    # when a user is mid-flow, their next photo belongs to the right
-    # pipeline, not the generic file-to-GCS dump. Each handler matches
-    # only when its own pending action is set, so they never both
-    # claim the same photo.
+    # /make-sticker (#44), /ocr (#45), and /summarize (#46) must precede
+    # FileStorageHandler: when a user is mid-flow, their next photo or
+    # document belongs to the right pipeline, not the generic
+    # file-to-GCS dump. Each handler matches only when its own pending
+    # action is set, so they never collide on the same upload.
     dispatcher.register(get_make_sticker_handler())
     dispatcher.register(get_ocr_handler())
+    dispatcher.register(get_summarize_handler())
     dispatcher.register(FileStorageHandler())
     # Voice transcription owns voice content (#43); FileStorageHandler
     # above intentionally does not match VoiceContent.
