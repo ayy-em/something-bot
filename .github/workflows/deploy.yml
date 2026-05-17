@@ -113,7 +113,10 @@ jobs:
         #   - POSTGRES_INSTANCE      (Cloud SQL instance conn name, #31;
         #                             also passed to --add-cloudsql-instances
         #                             so Cloud Run mounts the Auth Proxy socket)
-        #   - SOMETHING_GROUP_CHAT_ID (FinCo daily stats digest target, #25)
+        #   - SOMETHING_GROUP_CHAT_ID  (daily digest target chat, #25, #54)
+        #   - GOOGLE_OAUTH_SECRET_JSON (Desktop OAuth client JSON, #51)
+        #   - GOOGLE_OAUTH_CLIENT_ID   (client_id mirror, #51; not read at runtime)
+        #   - GSC_OAUTH_REFRESH_TOKEN  (personal refresh token for GSC, #51)
         # Each --set-secrets value must already have at least one Secret
         # Manager version or the deploy will fail.
         run: |
@@ -123,7 +126,7 @@ jobs:
             --image="${{ steps.image.outputs.sha_tag }}" \
             --service-account="${RUNTIME_SA}" \
             --add-cloudsql-instances="${{ steps.cloudsql.outputs.connection }}" \
-            --set-secrets="TELEGRAM_WEBHOOK_SECRET=telegram-webhook-secret-default:latest,TELEGRAM_BOT_TOKEN=telegram-bot-token-default:latest,TELEGRAM_QA_USERS=telegram-qa-users:latest,OPENAI_API_KEY=OPENAI_API_KEY:latest,POSTGRES_DSN=POSTGRES_DSN:latest,POSTGRES_INSTANCE=POSTGRES_INSTANCE:latest,SOMETHING_GROUP_CHAT_ID=SOMETHING_GROUP_CHAT_ID:latest" \
+            --set-secrets="TELEGRAM_WEBHOOK_SECRET=telegram-webhook-secret-default:latest,TELEGRAM_BOT_TOKEN=telegram-bot-token-default:latest,TELEGRAM_QA_USERS=telegram-qa-users:latest,OPENAI_API_KEY=OPENAI_API_KEY:latest,POSTGRES_DSN=POSTGRES_DSN:latest,POSTGRES_INSTANCE=POSTGRES_INSTANCE:latest,SOMETHING_GROUP_CHAT_ID=SOMETHING_GROUP_CHAT_ID:latest,GOOGLE_OAUTH_SECRET_JSON=GOOGLE_OAUTH_SECRET_JSON:latest,GOOGLE_OAUTH_CLIENT_ID=GOOGLE_OAUTH_CLIENT_ID:latest,GSC_OAUTH_REFRESH_TOKEN=GSC_OAUTH_REFRESH_TOKEN:latest" \
             --set-env-vars="SCHEDULER_SERVICE_ACCOUNT_EMAIL=something-bot-scheduler-sa@${PROJECT_ID}.iam.gserviceaccount.com,OPENAI_CONTEXT_BUCKET=something-bot-openai-context" \
             --quiet
 

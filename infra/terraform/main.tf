@@ -226,6 +226,21 @@ data "google_secret_manager_secret" "something_group_chat_id" {
   secret_id = var.something_group_chat_id_secret_name
 }
 
+data "google_secret_manager_secret" "google_oauth_secret_json" {
+  project   = var.project_id
+  secret_id = var.google_oauth_secret_json_secret_name
+}
+
+data "google_secret_manager_secret" "google_oauth_client_id" {
+  project   = var.project_id
+  secret_id = var.google_oauth_client_id_secret_name
+}
+
+data "google_secret_manager_secret" "gsc_oauth_refresh_token" {
+  project   = var.project_id
+  secret_id = var.gsc_oauth_refresh_token_secret_name
+}
+
 # --------------------------------------------------------------------------- #
 # Secret Manager — webhook secret placeholder per bot (value injected out-of-band)
 # --------------------------------------------------------------------------- #
@@ -298,6 +313,27 @@ resource "google_secret_manager_secret_iam_member" "cloudrun_postgres_instance" 
 resource "google_secret_manager_secret_iam_member" "cloudrun_something_group_chat_id" {
   project   = var.project_id
   secret_id = data.google_secret_manager_secret.something_group_chat_id.secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.cloudrun.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "cloudrun_google_oauth_secret_json" {
+  project   = var.project_id
+  secret_id = data.google_secret_manager_secret.google_oauth_secret_json.secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.cloudrun.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "cloudrun_google_oauth_client_id" {
+  project   = var.project_id
+  secret_id = data.google_secret_manager_secret.google_oauth_client_id.secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.cloudrun.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "cloudrun_gsc_oauth_refresh_token" {
+  project   = var.project_id
+  secret_id = data.google_secret_manager_secret.gsc_oauth_refresh_token.secret_id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.cloudrun.email}"
 }
@@ -423,6 +459,9 @@ resource "google_cloud_run_v2_service" "main" {
     google_secret_manager_secret_iam_member.cloudrun_postgres_dsn,
     google_secret_manager_secret_iam_member.cloudrun_postgres_instance,
     google_secret_manager_secret_iam_member.cloudrun_something_group_chat_id,
+    google_secret_manager_secret_iam_member.cloudrun_google_oauth_secret_json,
+    google_secret_manager_secret_iam_member.cloudrun_google_oauth_client_id,
+    google_secret_manager_secret_iam_member.cloudrun_gsc_oauth_refresh_token,
     google_storage_bucket_iam_member.cloudrun_files,
   ]
 }

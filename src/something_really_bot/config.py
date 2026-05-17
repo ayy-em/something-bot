@@ -156,6 +156,37 @@ class Settings(BaseSettings):
         ),
     )
 
+    # --- Google Search Console (#51) ---
+    google_oauth_secret_json: SecretStr | None = Field(
+        default=None,
+        description=(
+            "Full Desktop OAuth client JSON downloaded from GCP Console, "
+            "sourced from the GOOGLE_OAUTH_SECRET_JSON secret. The bot "
+            "parses the ``installed`` block to get the ``client_id`` + "
+            "``client_secret`` it needs to refresh the GSC access token. "
+            "When unset (or paired ``GSC_OAUTH_REFRESH_TOKEN`` unset), "
+            "the digest skips the GSC section per-site instead of failing."
+        ),
+    )
+    google_oauth_client_id: SecretStr | None = Field(
+        default=None,
+        description=(
+            "OAuth Desktop client id (the same value also lives inside "
+            "``GOOGLE_OAUTH_SECRET_JSON``). Kept as a standalone secret "
+            "for convenience; not read by the runtime."
+        ),
+    )
+    gsc_oauth_refresh_token: SecretStr | None = Field(
+        default=None,
+        description=(
+            "Personal-account OAuth refresh token authorizing the "
+            "``webmasters.readonly`` scope (#51). Minted out-of-band via "
+            "``scripts/grant_gsc_refresh_token.py`` and stored in the "
+            "GSC_OAUTH_REFRESH_TOKEN secret. Paired with "
+            "``google_oauth_secret_json`` to refresh GSC access tokens."
+        ),
+    )
+
     @field_validator("telegram_qa_user_ids", mode="before")
     @classmethod
     def _parse_qa_users(cls, raw: Any) -> Any:

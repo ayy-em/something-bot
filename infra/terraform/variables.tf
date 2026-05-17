@@ -131,7 +131,25 @@ variable "alerts_error_window_seconds" {
 }
 
 variable "something_group_chat_id_secret_name" {
-  description = "Existing Secret Manager secret holding the target Telegram chat_id for the FinCo daily stats digest (#25). Upper-snake-cased to match the env var name injected into Cloud Run."
+  description = "Existing Secret Manager secret holding the target Telegram chat_id for the daily digest (#25, #54). Upper-snake-cased to match the env var name injected into Cloud Run."
   type        = string
   default     = "SOMETHING_GROUP_CHAT_ID"
+}
+
+variable "google_oauth_secret_json_secret_name" {
+  description = "Existing Secret Manager secret holding the Desktop OAuth client JSON (#51). Bot parses the 'installed' block at runtime to refresh GSC access tokens. Minted out-of-band via scripts/grant_gsc_refresh_token.py."
+  type        = string
+  default     = "GOOGLE_OAUTH_SECRET_JSON"
+}
+
+variable "google_oauth_client_id_secret_name" {
+  description = "Existing Secret Manager secret holding the Desktop OAuth client_id (#51). Same value also lives inside GOOGLE_OAUTH_SECRET_JSON; standalone secret kept for operator convenience. Not read by the runtime but the SA still needs accessor so the deploy --set-secrets injection succeeds if we choose to wire it later."
+  type        = string
+  default     = "GOOGLE_OAUTH_CLIENT_ID"
+}
+
+variable "gsc_oauth_refresh_token_secret_name" {
+  description = "Existing Secret Manager secret holding the personal-account refresh token authorizing webmasters.readonly (#51). Paired with GOOGLE_OAUTH_SECRET_JSON to refresh short-lived access tokens at call time."
+  type        = string
+  default     = "GSC_OAUTH_REFRESH_TOKEN"
 }

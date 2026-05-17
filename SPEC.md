@@ -839,11 +839,10 @@ Single daily Telegram digest reporting per-site website performance and a 24h ta
 Data sources:
 
 * **Google Analytics 4 Data API** — `totalUsers`, `newUsers`, and the top-5 pages by `screenPageViews`. The Cloud Run runtime SA reads each property; Viewer access is granted via the Admin API since GA4's UI rejects service-account emails. See `scripts/grant_ga4_viewer.py`.
-* **`public.job_history_log` (#53)** — per-job `succeeded`/`failed` counts over the trailing 24 hours, rendered as a "Jobs (last 24h)" section appended below the per-site GA4 sections.
+* **Google Search Console** (#51) — `clicks` and `impressions` for whole-property totals, rendered alongside the GA4 stats. GSC has no Admin API and rejects service-account emails, so the runtime authenticates with a personal-OAuth refresh token (scope: `webmasters.readonly`) minted one-off via `scripts/grant_gsc_refresh_token.py`. Three Secret Manager secrets back this: `GOOGLE_OAUTH_SECRET_JSON` (the full Desktop OAuth client JSON, parsed at runtime), `GOOGLE_OAUTH_CLIENT_ID` (operator-convenience mirror, not read at runtime), and `GSC_OAUTH_REFRESH_TOKEN` (the long-lived refresh token).
+* **`public.job_history_log` (#53)** — per-job `succeeded`/`failed` counts over the trailing 24 hours, rendered as a "Jobs (last 24h)" section appended below the per-site sections.
 
-Google Search Console is **out of scope** for #25. The runtime SA cannot be granted GSC access (Google's GSC UI also rejects non-Google-account emails, and GSC has no Admin API for user management), so adding GSC requires a personal-OAuth refresh-token flow against a real Google user with property access. That work is tracked as a separate backlog issue.
-
-Graceful degradation: per-site GA4 failures drop that site's section; Postgres failure on the tally query drops only the tally section; if every site fails *and* the tally is empty, the digest still sends "No data today." so the operator notices the failure mode rather than silent absence.
+Graceful degradation: per-site GA4 and GSC fetches run in parallel and fail independently — a site's section drops only if **both** sources fail; otherwise the surviving source renders alone. Postgres failure on the tally query drops only the tally section; if every site fails *and* the tally is empty, the digest still sends "No data today." so the operator notices the failure mode rather than silent absence.
 
 ---
 
@@ -912,6 +911,9 @@ GCS_BUCKET
 OPENAI_API_KEY
 POSTGRES_DSN
 POSTGRES_INSTANCE
+GOOGLE_OAUTH_SECRET_JSON
+GOOGLE_OAUTH_CLIENT_ID
+GSC_OAUTH_REFRESH_TOKEN
 ```
 
 `POSTGRES_DSN` and `POSTGRES_INSTANCE` together drive the shared Cloud SQL connection described in §6.8.1: the DSN supplies user/password/database; the instance connection name is read at deploy time (passed to `--add-cloudsql-instances`) and at runtime (used to mount the Auth Proxy socket and override the DSN host). The instance secret is also readable by the deployer SA so the deploy workflow can pass it to `gcloud`.

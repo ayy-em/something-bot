@@ -14,14 +14,47 @@ from something_really_bot.features.daily_digest.source.google_analytics import (
     SiteMetrics,
     TopPage,
 )
+from something_really_bot.features.daily_digest.source.google_search_console import (
+    GoogleSearchConsoleError,
+    SiteSearchMetrics,
+)
 from something_really_bot.routing.types import BotContext
 from something_really_bot.services.job_history import JobTallyRow
 
 GROUP_CHAT_ID = -1001234567890
 
-SITE_A = SiteConfig(label="A", domain="a.example", ga4_property_id="111")
-SITE_B = SiteConfig(label="B", domain="b.example", ga4_property_id="222")
+SITE_A = SiteConfig(
+    label="A",
+    domain="a.example",
+    ga4_property_id="111",
+    gsc_site_url="sc-domain:a.example",
+)
+SITE_B = SiteConfig(
+    label="B",
+    domain="b.example",
+    ga4_property_id="222",
+    gsc_site_url="sc-domain:b.example",
+)
 TWO_SITES: tuple[SiteConfig, ...] = (SITE_A, SITE_B)
+
+
+def _gsc_unavailable():
+    """Default fixture: GSC fails for every site, dropping its line."""
+
+    async def fetch(_site_url, _start, _end):
+        raise GoogleSearchConsoleError("not configured in test")
+
+    return fetch
+
+
+def _gsc_fetcher_for(values: dict[str, SiteSearchMetrics | BaseException]):
+    async def fetch(site_url: str, _start, _end):
+        result = values[site_url]
+        if isinstance(result, BaseException):
+            raise result
+        return result
+
+    return fetch
 
 
 def _settings(*, chat_id: int | None = GROUP_CHAT_ID) -> Settings:
@@ -126,7 +159,9 @@ async def test_run_happy_path_two_sites() -> None:
             ),
         }
     )
-    job = DailyDigestJob(sites=TWO_SITES, ga4_fetcher=ga4, now=_fixed_now)
+    job = DailyDigestJob(
+        sites=TWO_SITES, ga4_fetcher=ga4, gsc_fetcher=_gsc_unavailable(), now=_fixed_now
+    )
 
     await job.run(_ctx(telegram_client=tg, persistence=persistence))
 
@@ -159,7 +194,9 @@ async def test_run_omits_failed_ga4_lines_for_one_site() -> None:
             "222": SiteMetrics(total_users=10, new_users=2, total_users_7d=70, top_pages=()),
         }
     )
-    job = DailyDigestJob(sites=TWO_SITES, ga4_fetcher=ga4, now=_fixed_now)
+    job = DailyDigestJob(
+        sites=TWO_SITES, ga4_fetcher=ga4, gsc_fetcher=_gsc_unavailable(), now=_fixed_now
+    )
 
     await job.run(_ctx(telegram_client=tg))
 
@@ -179,7 +216,9 @@ async def test_run_sends_no_data_today_when_all_ga4_calls_fail() -> None:
             "222": GoogleAnalyticsError("b"),
         }
     )
-    job = DailyDigestJob(sites=TWO_SITES, ga4_fetcher=ga4, now=_fixed_now)
+    job = DailyDigestJob(
+        sites=TWO_SITES, ga4_fetcher=ga4, gsc_fetcher=_gsc_unavailable(), now=_fixed_now
+    )
 
     await job.run(_ctx(telegram_client=tg, persistence=persistence))
 
@@ -192,7 +231,9 @@ async def test_run_does_nothing_when_chat_id_missing() -> None:
     tg = _FakeTelegramClient()
     persistence = _RecordingPersistence()
     ga4 = _ga4_fetcher_for({"111": SiteMetrics(0, 0, 0, ())})
-    job = DailyDigestJob(sites=(SITE_A,), ga4_fetcher=ga4, now=_fixed_now)
+    job = DailyDigestJob(
+        sites=(SITE_A,), ga4_fetcher=ga4, gsc_fetcher=_gsc_unavailable(), now=_fixed_now
+    )
 
     await job.run(_ctx(chat_id=None, telegram_client=tg, persistence=persistence))
 
@@ -204,7 +245,9 @@ async def test_run_persists_failure_when_send_raises_and_does_not_propagate() ->
     tg = _FakeTelegramClient(raises=RuntimeError("network down"))
     persistence = _RecordingPersistence()
     ga4 = _ga4_fetcher_for({"111": SiteMetrics(1, 1, 7, ())})
-    job = DailyDigestJob(sites=(SITE_A,), ga4_fetcher=ga4, now=_fixed_now)
+    job = DailyDigestJob(
+        sites=(SITE_A,), ga4_fetcher=ga4, gsc_fetcher=_gsc_unavailable(), now=_fixed_now
+    )
 
     # Must not raise — Cloud Scheduler would retry and double-send.
     await job.run(_ctx(telegram_client=tg, persistence=persistence))
@@ -220,7 +263,9 @@ async def test_run_persists_failure_when_send_raises_and_does_not_propagate() ->
 async def test_run_handles_missing_telegram_client() -> None:
     persistence = _RecordingPersistence()
     ga4 = _ga4_fetcher_for({"111": SiteMetrics(1, 1, 7, ())})
-    job = DailyDigestJob(sites=(SITE_A,), ga4_fetcher=ga4, now=_fixed_now)
+    job = DailyDigestJob(
+        sites=(SITE_A,), ga4_fetcher=ga4, gsc_fetcher=_gsc_unavailable(), now=_fixed_now
+    )
 
     await job.run(_ctx(telegram_client=None, persistence=persistence))
 
@@ -241,7 +286,9 @@ async def test_run_swallows_persistence_failure() -> None:
 
     tg = _FakeTelegramClient()
     ga4 = _ga4_fetcher_for({"111": SiteMetrics(1, 1, 7, ())})
-    job = DailyDigestJob(sites=(SITE_A,), ga4_fetcher=ga4, now=_fixed_now)
+    job = DailyDigestJob(
+        sites=(SITE_A,), ga4_fetcher=ga4, gsc_fetcher=_gsc_unavailable(), now=_fixed_now
+    )
 
     await job.run(_ctx(telegram_client=tg, persistence=_BadPersistence()))
 
@@ -252,7 +299,9 @@ async def test_tally_section_omitted_when_history_empty() -> None:
     tg = _FakeTelegramClient()
     ga4 = _ga4_fetcher_for({"111": SiteMetrics(10, 5, 70, ())})
     history = _FakeJobHistoryLogger(tally=[])
-    job = DailyDigestJob(sites=(SITE_A,), ga4_fetcher=ga4, now=_fixed_now)
+    job = DailyDigestJob(
+        sites=(SITE_A,), ga4_fetcher=ga4, gsc_fetcher=_gsc_unavailable(), now=_fixed_now
+    )
 
     await job.run(_ctx(telegram_client=tg, job_history_logger=history))
 
@@ -270,7 +319,9 @@ async def test_tally_section_renders_and_sorts_by_total() -> None:
             JobTallyRow(job_name="daily-digest", succeeded=1, failed=0),
         ]
     )
-    job = DailyDigestJob(sites=(SITE_A,), ga4_fetcher=ga4, now=_fixed_now)
+    job = DailyDigestJob(
+        sites=(SITE_A,), ga4_fetcher=ga4, gsc_fetcher=_gsc_unavailable(), now=_fixed_now
+    )
 
     await job.run(_ctx(telegram_client=tg, job_history_logger=history))
 
@@ -292,7 +343,9 @@ async def test_tally_section_omitted_when_postgres_fails() -> None:
     tg = _FakeTelegramClient()
     ga4 = _ga4_fetcher_for({"111": SiteMetrics(10, 5, 70, ())})
     history = _FakeJobHistoryLogger(raises=RuntimeError("pg down"))
-    job = DailyDigestJob(sites=(SITE_A,), ga4_fetcher=ga4, now=_fixed_now)
+    job = DailyDigestJob(
+        sites=(SITE_A,), ga4_fetcher=ga4, gsc_fetcher=_gsc_unavailable(), now=_fixed_now
+    )
 
     # Digest still sends, just without the tally section.
     await job.run(_ctx(telegram_client=tg, job_history_logger=history))
@@ -310,7 +363,9 @@ async def test_tally_only_digest_when_all_sites_fail_but_jobs_ran() -> None:
     history = _FakeJobHistoryLogger(
         tally=[JobTallyRow(job_name="video_downloader", succeeded=2, failed=0)]
     )
-    job = DailyDigestJob(sites=(SITE_A,), ga4_fetcher=ga4, now=_fixed_now)
+    job = DailyDigestJob(
+        sites=(SITE_A,), ga4_fetcher=ga4, gsc_fetcher=_gsc_unavailable(), now=_fixed_now
+    )
 
     await job.run(_ctx(telegram_client=tg, job_history_logger=history))
 
@@ -318,3 +373,93 @@ async def test_tally_only_digest_when_all_sites_fail_but_jobs_ran() -> None:
     assert "No data today." not in text
     assert "Jobs (last 24h)" in text
     assert "video_downloader" in text
+
+
+# --------------------------------------------------------------------------- #
+# GSC integration (#51)
+# --------------------------------------------------------------------------- #
+
+
+async def test_run_renders_gsc_line_alongside_ga4() -> None:
+    tg = _FakeTelegramClient()
+    ga4 = _ga4_fetcher_for(
+        {"111": SiteMetrics(total_users=10, new_users=2, total_users_7d=70, top_pages=())}
+    )
+    gsc = _gsc_fetcher_for({"sc-domain:a.example": SiteSearchMetrics(clicks=45, impressions=1234)})
+    job = DailyDigestJob(sites=(SITE_A,), ga4_fetcher=ga4, gsc_fetcher=gsc, now=_fixed_now)
+
+    await job.run(_ctx(telegram_client=tg))
+
+    text = tg.sends[0]["text"]
+    assert "Visitors: 10 (2 new), 70 last 7 days" in text
+    assert "Search: 45 clicks, 1,234 impressions" in text
+
+
+async def test_run_drops_gsc_line_when_only_gsc_fails() -> None:
+    tg = _FakeTelegramClient()
+    ga4 = _ga4_fetcher_for(
+        {"111": SiteMetrics(total_users=10, new_users=2, total_users_7d=70, top_pages=())}
+    )
+    gsc = _gsc_fetcher_for({"sc-domain:a.example": GoogleSearchConsoleError("403")})
+    job = DailyDigestJob(sites=(SITE_A,), ga4_fetcher=ga4, gsc_fetcher=gsc, now=_fixed_now)
+
+    await job.run(_ctx(telegram_client=tg))
+
+    text = tg.sends[0]["text"]
+    # GA4 still renders; GSC line is silently absent.
+    assert "Visitors: 10" in text
+    assert "Search:" not in text
+    assert "A (a.example)" in text
+
+
+async def test_run_keeps_site_section_when_only_ga4_fails_but_gsc_succeeds() -> None:
+    """Per-source degradation: GSC alone is enough to keep the site."""
+    tg = _FakeTelegramClient()
+    ga4 = _ga4_fetcher_for({"111": GoogleAnalyticsError("ga4 down")})
+    gsc = _gsc_fetcher_for({"sc-domain:a.example": SiteSearchMetrics(clicks=99, impressions=2222)})
+    job = DailyDigestJob(sites=(SITE_A,), ga4_fetcher=ga4, gsc_fetcher=gsc, now=_fixed_now)
+
+    await job.run(_ctx(telegram_client=tg))
+
+    text = tg.sends[0]["text"]
+    assert "A (a.example)" in text
+    assert "Visitors:" not in text
+    assert "Search: 99 clicks, 2,222 impressions" in text
+
+
+async def test_run_drops_whole_site_when_both_sources_fail() -> None:
+    tg = _FakeTelegramClient()
+    ga4 = _ga4_fetcher_for({"111": GoogleAnalyticsError("ga4 down")})
+    gsc = _gsc_fetcher_for({"sc-domain:a.example": GoogleSearchConsoleError("gsc down")})
+    job = DailyDigestJob(sites=(SITE_A,), ga4_fetcher=ga4, gsc_fetcher=gsc, now=_fixed_now)
+
+    await job.run(_ctx(telegram_client=tg))
+
+    text = tg.sends[0]["text"]
+    assert "A (a.example)" not in text
+    assert "No data today." in text
+
+
+async def test_run_skips_gsc_when_site_has_no_gsc_site_url() -> None:
+    """Sites with ``gsc_site_url=None`` shouldn't trigger the GSC fetcher at all."""
+    site_without_gsc = SiteConfig(label="C", domain="c.example", ga4_property_id="333")
+    tg = _FakeTelegramClient()
+    ga4 = _ga4_fetcher_for(
+        {"333": SiteMetrics(total_users=5, new_users=1, total_users_7d=20, top_pages=())}
+    )
+
+    async def _gsc_explodes(_site_url, _start, _end):
+        raise AssertionError("GSC fetcher must not be called when gsc_site_url is None")
+
+    job = DailyDigestJob(
+        sites=(site_without_gsc,),
+        ga4_fetcher=ga4,
+        gsc_fetcher=_gsc_explodes,
+        now=_fixed_now,
+    )
+
+    await job.run(_ctx(telegram_client=tg))
+
+    text = tg.sends[0]["text"]
+    assert "C (c.example)" in text
+    assert "Search:" not in text

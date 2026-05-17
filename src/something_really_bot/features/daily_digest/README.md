@@ -11,7 +11,7 @@ the trailing 24 hours.
   Cloud Scheduler (something-bot-daily-digest, OIDC)
     → POST /jobs/daily-digest on Cloud Run
         → DailyDigestJob.run(ctx)
-            → for each site in SITES: GA4 in parallel
+            → for each site in SITES: GA4 + GSC in parallel
             → fetch 24h job tally from job_history_log
             → compose digest with per-site degradation
             → send to settings.something_group_chat_id
@@ -23,20 +23,37 @@ the trailing 24 hours.
 | Source | Module | Surfaces |
 |---|---|---|
 | GA4 Data API | `source/google_analytics.py` | `totalUsers`, `newUsers`, top-5 by `screenPageViews` |
+| Google Search Console (#51) | `source/google_search_console.py` | `clicks`, `impressions` (whole-property totals) |
 | `public.job_history_log` (#53) | `services.job_history.JobHistoryLogger.fetch_recent_summary` | per-job ok/failed counts over the last 24h |
 
-The GA4 wrapper runs the synchronous Google SDK in a thread via
-`asyncio.to_thread` so the FastAPI loop is never blocked. Failures are
-funneled to `GoogleAnalyticsError` so the handler can omit a site's
-section without failing the whole digest. Postgres failures on the
-tally query degrade to an empty tally (with a warning) — the website
-sections still send.
+Both website-data wrappers run the synchronous Google SDK in a thread
+via `asyncio.to_thread` so the FastAPI loop is never blocked. For each
+site, GA4 and GSC are fetched in parallel and degrade independently:
 
-Google Search Console is intentionally **not** integrated here. Adding
-GSC requires a personal-OAuth refresh-token flow rather than the
-runtime SA (Google's GSC UI rejects non-Google-account emails). That
-work lives on the backlog — see the GSC integration issue linked from
-SPEC.md.
+- GA4 failures are funneled to `GoogleAnalyticsError`.
+- GSC failures are funneled to `GoogleSearchConsoleError`.
+- A site's section is dropped **only if both sources fail**. If just
+  one source is up, that source still renders.
+- Postgres failures on the tally query degrade to an empty tally (with
+  a warning) — the website sections still send.
+
+GSC has no Admin API and its UI rejects service-account emails, so
+GSC access is authenticated with a personal-OAuth refresh token
+(scope `webmasters.readonly`), minted one-off via
+`scripts/grant_gsc_refresh_token.py` and stored in three Secret
+Manager secrets:
+
+- `GOOGLE_OAUTH_SECRET_JSON` — the full Desktop OAuth client JSON
+  (`installed.client_id` + `installed.client_secret`), parsed by
+  `_build_service` at call time.
+- `GOOGLE_OAUTH_CLIENT_ID` — operator-convenience mirror of the
+  client_id (also lives inside `GOOGLE_OAUTH_SECRET_JSON`). Not read
+  at runtime; provisioned so the Cloud Run `--set-secrets` injection
+  succeeds if we want to wire it later.
+- `GSC_OAUTH_REFRESH_TOKEN` — the long-lived personal refresh token.
+
+The runtime SA needs `roles/secretmanager.secretAccessor` on all
+three; Terraform's `cloudrun_*` IAM bindings cover this.
 
 ## Tally section
 

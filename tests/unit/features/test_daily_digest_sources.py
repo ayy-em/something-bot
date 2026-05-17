@@ -1,20 +1,25 @@
-"""Unit tests for the GA4 source wrapper (#25).
+"""Unit tests for the GA4 + GSC source wrappers (#25, #51).
 
-The wrapper runs the synchronous Google SDK in a thread; tests inject a
-fake client to avoid hitting the network and the SDK. GSC integration
-is intentionally out of scope here — see the backlog issue for the
-personal-OAuth-based reader.
+Both wrappers run the synchronous Google SDK in a thread; tests inject
+a fake client/service to avoid hitting the network and the SDK.
 """
 
+import json
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Any
 
 import pytest
+from pydantic import SecretStr
 
+from something_really_bot.config import Settings
 from something_really_bot.features.daily_digest.source.google_analytics import (
     GoogleAnalyticsError,
     fetch_site_metrics,
+)
+from something_really_bot.features.daily_digest.source.google_search_console import (
+    GoogleSearchConsoleError,
+    fetch_site_search_metrics,
 )
 
 
@@ -115,3 +120,138 @@ async def test_fetch_site_metrics_funnels_client_failures_to_typed_error() -> No
     with pytest.raises(GoogleAnalyticsError) as excinfo:
         await fetch_site_metrics("280078425", date(2026, 5, 16), date(2026, 5, 16), client=_Boom())
     assert "transport down" in str(excinfo.value)
+
+
+# --------------------------------------------------------------------------- #
+# Google Search Console (#51)
+# --------------------------------------------------------------------------- #
+
+
+class _FakeGSCQuery:
+    def __init__(self, response: Any) -> None:
+        self._response = response
+        self.calls: list[dict[str, Any]] = []
+
+    def query(self, *, siteUrl: str, body: dict[str, Any]):  # noqa: N803
+        self.calls.append({"siteUrl": siteUrl, "body": body})
+        return self
+
+    def execute(self) -> Any:
+        if isinstance(self._response, BaseException):
+            raise self._response
+        return self._response
+
+
+class _FakeGSCService:
+    """Stub `googleapiclient` resource: ``service.searchanalytics().query(...).execute()``."""
+
+    def __init__(self, response: Any) -> None:
+        self._query = _FakeGSCQuery(response)
+
+    def searchanalytics(self) -> _FakeGSCQuery:
+        return self._query
+
+
+async def test_fetch_site_search_metrics_parses_clicks_and_impressions() -> None:
+    service = _FakeGSCService(response={"rows": [{"clicks": 45.0, "impressions": 1234.0}]})
+
+    result = await fetch_site_search_metrics(
+        "sc-domain:somethingreally.fun",
+        date(2026, 5, 16),
+        date(2026, 5, 16),
+        service=service,
+    )
+
+    assert result.clicks == 45
+    assert result.impressions == 1234
+    # The query body matches what GSC expects for whole-property totals.
+    call = service._query.calls[0]
+    assert call["siteUrl"] == "sc-domain:somethingreally.fun"
+    assert call["body"]["startDate"] == "2026-05-16"
+    assert call["body"]["endDate"] == "2026-05-16"
+    assert "dimensions" not in call["body"]
+
+
+async def test_fetch_site_search_metrics_treats_empty_rows_as_zero() -> None:
+    service = _FakeGSCService(response={"rows": []})
+
+    result = await fetch_site_search_metrics(
+        "sc-domain:fintechcompass.net",
+        date(2026, 5, 16),
+        date(2026, 5, 16),
+        service=service,
+    )
+
+    assert result.clicks == 0
+    assert result.impressions == 0
+
+
+async def test_fetch_site_search_metrics_funnels_service_errors() -> None:
+    service = _FakeGSCService(response=RuntimeError("403 Forbidden"))
+
+    with pytest.raises(GoogleSearchConsoleError) as excinfo:
+        await fetch_site_search_metrics(
+            "sc-domain:fintechcompass.net",
+            date(2026, 5, 16),
+            date(2026, 5, 16),
+            service=service,
+        )
+    assert "403 Forbidden" in str(excinfo.value)
+
+
+async def test_fetch_site_search_metrics_raises_when_secrets_missing() -> None:
+    """No ``service`` passed and ``GOOGLE_OAUTH_SECRET_JSON`` unset → typed error."""
+    settings = Settings.model_construct(
+        telegram_webhook_secret=SecretStr("x"),
+        telegram_bot_token=SecretStr("tok"),
+        telegram_qa_user_ids=frozenset(),
+        google_oauth_secret_json=None,
+        gsc_oauth_refresh_token=None,
+    )
+
+    with pytest.raises(GoogleSearchConsoleError) as excinfo:
+        await fetch_site_search_metrics(
+            "sc-domain:fintechcompass.net",
+            date(2026, 5, 16),
+            date(2026, 5, 16),
+            settings=settings,
+        )
+    assert "GOOGLE_OAUTH_SECRET_JSON" in str(excinfo.value)
+
+
+async def test_fetch_site_search_metrics_raises_on_malformed_client_json() -> None:
+    settings = Settings.model_construct(
+        telegram_webhook_secret=SecretStr("x"),
+        telegram_bot_token=SecretStr("tok"),
+        telegram_qa_user_ids=frozenset(),
+        google_oauth_secret_json=SecretStr("not json"),
+        gsc_oauth_refresh_token=SecretStr("1//refresh"),
+    )
+
+    with pytest.raises(GoogleSearchConsoleError) as excinfo:
+        await fetch_site_search_metrics(
+            "sc-domain:fintechcompass.net",
+            date(2026, 5, 16),
+            date(2026, 5, 16),
+            settings=settings,
+        )
+    assert "not valid JSON" in str(excinfo.value)
+
+
+async def test_fetch_site_search_metrics_raises_when_client_json_missing_keys() -> None:
+    settings = Settings.model_construct(
+        telegram_webhook_secret=SecretStr("x"),
+        telegram_bot_token=SecretStr("tok"),
+        telegram_qa_user_ids=frozenset(),
+        google_oauth_secret_json=SecretStr(json.dumps({"installed": {"client_id": "only-id"}})),
+        gsc_oauth_refresh_token=SecretStr("1//refresh"),
+    )
+
+    with pytest.raises(GoogleSearchConsoleError) as excinfo:
+        await fetch_site_search_metrics(
+            "sc-domain:fintechcompass.net",
+            date(2026, 5, 16),
+            date(2026, 5, 16),
+            settings=settings,
+        )
+    assert "missing client_id/client_secret" in str(excinfo.value)
