@@ -124,8 +124,8 @@ async def test_run_happy_path_two_sites() -> None:
     assert "Visitors: 1,234 (412 new), 8,765 last 7 days" in text
     assert "pricing — 312" in text
     assert "/pricing" not in text
-    # Root path keeps a slash so the line is not empty.
-    assert "/ — 99" in text
+    # Root path renders as "Homepage" so the line is not empty.
+    assert "Homepage — 99" in text
 
     assert len(persistence.responses) == 1
     row = persistence.responses[0]

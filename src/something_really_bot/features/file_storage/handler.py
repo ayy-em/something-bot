@@ -1,7 +1,9 @@
 """Handler that schedules Telegram → GCS file downloads (#20).
 
-Matches *private-chat* messages whose content is a photo, document, or
-voice. Group/supergroup/channel file uploads are intentionally not
+Matches *private-chat* messages whose content is a photo or document.
+Voice messages are owned by the voice transcription feature (#43),
+which handles its own GCS upload under the ``voice_transcription_requests/``
+prefix. Group/supergroup/channel file uploads are intentionally not
 matched here — their metadata still lands in BigQuery via the webhook
 orchestrator's ``telegram_files`` insert, but the bot does not download
 them (SPEC §6.3 forbids the bot from acting in non-private chats).
@@ -20,7 +22,6 @@ from something_really_bot.telegram.models import (
     ParsedUpdate,
     PhotoContent,
     PrivateMessage,
-    VoiceContent,
 )
 
 _logger = get_logger(__name__)
@@ -30,13 +31,13 @@ class FileStorageHandler:
     """Trigger background file download for private-chat file uploads."""
 
     name = "file_storage.download"
-    description = "Send me a photo, document, or voice message — I'll save it."
-    help_usage = "Upload a photo/document/voice"
+    description = "Send me a photo or document — I'll save it."
+    help_usage = "Upload a photo/document"
 
     def matches(self, update: ParsedUpdate, _ctx: BotContext) -> bool:
         if not isinstance(update, PrivateMessage):
             return False
-        return isinstance(update.content, PhotoContent | DocumentContent | VoiceContent)
+        return isinstance(update.content, PhotoContent | DocumentContent)
 
     async def handle(self, update: ParsedUpdate, ctx: BotContext) -> HandlerResult:
         assert isinstance(update, PrivateMessage)
@@ -84,15 +85,5 @@ def _build_request(update: PrivateMessage, bot_id: str) -> FileFetchRequest | No
             mime_type=doc.mime_type,
             file_size_bytes=doc.file_size,
             original_filename=doc.file_name,
-        )
-    if isinstance(content, VoiceContent):
-        voice = content.voice
-        return FileFetchRequest(
-            **common,
-            file_id=voice.file_id,
-            file_unique_id=voice.file_unique_id,
-            file_type="voice",
-            mime_type=voice.mime_type,
-            file_size_bytes=voice.file_size,
         )
     return None

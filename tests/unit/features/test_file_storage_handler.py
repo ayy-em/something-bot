@@ -131,7 +131,6 @@ def _channel_photo() -> ChannelPost:
     [
         (_private_photo, "photo"),
         (_private_document, "document"),
-        (_private_voice, "voice"),
     ],
 )
 async def test_matches_and_schedules_private_file_uploads(factory, expected_type: str) -> None:
@@ -198,10 +197,7 @@ async def test_document_handler_carries_filename_and_mime() -> None:
     assert request.mime_type == "application/pdf"
 
 
-async def test_voice_handler_carries_mime() -> None:
-    fetcher = _RecordingFetcher()
-    await FileStorageHandler().handle(_private_voice(), _ctx(fetcher))
-
-    request = fetcher.scheduled[0]
-    assert request.mime_type == "audio/ogg"
-    assert request.file_type == "voice"
+async def test_does_not_match_voice_content() -> None:
+    # Voice is owned by the voice_transcription handler (#43); FileStorage
+    # must step out so transcription can claim it via dispatch precedence.
+    assert FileStorageHandler().matches(_private_voice(), _ctx(_RecordingFetcher())) is False

@@ -596,6 +596,68 @@ timeout / concurrency 8 in `infra/terraform/variables.tf` to fit
 
 ---
 
+## 6.12 Voice Transcription (#43)
+
+The bot transcribes Telegram voice memos in private, group, and
+supergroup chats. Each voice memo gets stored in GCS, transcribed via
+OpenAI, summarized + emotion-assessed in a single chat call, and
+replied to inline. See `src/something_really_bot/features/voice_transcription/README.md`
+for the full flow, error matrix, and Postgres schema.
+
+### Trigger
+
+Any `VoiceContent` in `PrivateMessage`, `GroupMessage`, or
+`SupergroupMessage`. `FileStorageHandler` no longer matches
+`VoiceContent` (it kept photo + document); voice routing is owned by
+this feature.
+
+### Caps
+
+* Duration: 10 minutes — voice memos over the cap get a clear rejection
+  reply, no background work.
+* File size: 25 MB — defensive ceiling matching the OpenAI request
+  limit. 10 min of Opus voice is ~3-5 MB in practice.
+
+### Pipeline
+
+1. Download the voice file from Telegram (in-memory bytes).
+2. Upload to GCS under
+   `voice_transcription_requests/{chat_id}/{message_id}/voice_{file_unique_id}.ogg`.
+3. Transcribe via OpenAI `audio.transcriptions.create` with
+   `model="gpt-4o-transcribe"`.
+4. One `chat.completions.create` call with `response_format=json_object`
+   returns `{"summary": "...", "emotion": "..."}`.
+5. Reply to the original voice memo with the formatted transcript +
+   summary + emotion read.
+
+Webhook acks Telegram immediately after the inline "Transcribing your
+voice memo…" reply + 👀 reaction; steps 1–5 run in
+`asyncio.create_task`.
+
+### Persistence
+
+`public.voice_transcription_jobs` — one row per attempt with full
+lifecycle (`pending → downloading → uploading → transcribing → analyzing
+→ sending → succeeded`, or `failed` at any step). Stores transcript,
+summary, emotion, GCS path, and Telegram reply message id on success;
+`error_class`/`error_message` on failure.
+
+### Error reporting
+
+Every failure mode (download, transcription, analysis, send) maps to a
+single user-visible reply. The OpenAI-key-missing case has its own
+explicit message so the bot isn't silent if config drifts.
+
+### Out of scope (backlog)
+
+* `/vtt` command for transcribing uploaded audio files (mp3/m4a/wav) in
+  DMs — tracked as a separate backlog issue.
+* Editing the "Transcribing…" ack in place vs sending two messages —
+  current behavior matches the video downloader pattern (two messages).
+* Speaker diarization, multi-speaker emotion analysis.
+
+---
+
 ## 7. Scheduled Jobs
 
 Cron-style work runs via Cloud Scheduler hitting `POST /jobs/{name}` on Cloud Run (#22). Each job is a `JobHandler` registered in `main.py`; the scheduler is defined in `infra/terraform/scheduler.tf` (one entry per job). OIDC verification on the route ensures only the scheduler SA can invoke it.

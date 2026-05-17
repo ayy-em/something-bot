@@ -1,0 +1,427 @@
+"""Voice transcription handler + background orchestrator (#43).
+
+Matches voice messages in private, group, and supergroup chats. The
+handler does the bare minimum on the request hot path:
+
+1. Reject voice memos over the duration cap with a clear reply.
+2. Ack the user with a "transcribing…" reply pinned to the trigger.
+3. Stamp a 👀 reaction (best-effort).
+4. Schedule download + GCS upload + transcribe + analyze + send as an
+   asyncio task so the webhook returns 200 immediately.
+
+Every failure in the background path is funneled into a user-visible
+message instead of leaking SDK errors.
+"""
+
+import asyncio
+import contextlib
+from collections.abc import Callable, Coroutine
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from functools import lru_cache
+from typing import Any
+
+from something_really_bot.features.voice_transcription.storage import (
+    JobRow,
+    VoiceJobStorage,
+)
+from something_really_bot.features.voice_transcription.transcriber import (
+    AnalysisError,
+    TranscriptionError,
+    VoiceTranscriber,
+    get_voice_transcriber,
+)
+from something_really_bot.file_storage.gcs import GCSStorage, get_gcs_storage
+from something_really_bot.logging import get_logger
+from something_really_bot.persistence import EventRecord
+from something_really_bot.persistence.postgres import get_postgres_storage
+from something_really_bot.routing.types import BotContext, HandlerResult
+from something_really_bot.telegram.client import (
+    TelegramClient,
+    TelegramFileError,
+    TelegramSendError,
+    get_telegram_client,
+)
+from something_really_bot.telegram.models import (
+    GroupMessage,
+    ParsedUpdate,
+    PrivateMessage,
+    SupergroupMessage,
+    Voice,
+    VoiceContent,
+)
+
+_logger = get_logger(__name__)
+
+MAX_DURATION_SECONDS = 10 * 60  # 10 min
+# Whisper / gpt-4o-transcribe accepts up to 25 MB per request. 10 min
+# of Opus voice is ~3-5 MB so this is a defensive cap rather than a
+# practical one.
+MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024
+
+ACK_REACTION = "👀"
+ACK_TEXT = "Transcribing your voice memo…"
+
+_REPLY_TEMPLATE = "Your transcript.\n\nSummary:\n{summary}\n{emotion}\n\nTranscript:\n{transcript}"
+
+_ERROR_TOO_LONG = "That voice memo is over the 10-minute limit. Try sending a shorter one."
+_ERROR_TOO_LARGE = "That voice memo is too large to transcribe. Try sending a shorter one."
+_ERROR_DOWNLOAD_FAILED = (
+    "Couldn't pull that voice memo from Telegram. Try sending it again in a moment."
+)
+_ERROR_TRANSCRIPTION_FAILED = (
+    "Couldn't transcribe that voice memo. The transcription service might be "
+    "having a moment — try again shortly."
+)
+_ERROR_ANALYSIS_FAILED = "Transcribed your voice memo but couldn't summarize it. Try again shortly."
+_ERROR_TRANSCRIBER_UNAVAILABLE = (
+    "Voice transcription isn't configured right now. Logged for review."
+)
+_ERROR_GENERIC = "Something went wrong handling that voice memo. Logged."
+
+Scheduler = Callable[[Coroutine[Any, Any, None]], Any]
+
+_SupportedMessage = PrivateMessage | GroupMessage | SupergroupMessage
+
+
+@dataclass(frozen=True)
+class _BackgroundContext:
+    """Frozen handles + ids handed off to the background task."""
+
+    bot_id: str
+    chat_id: int
+    user_id: int
+    message_id: int
+    voice: Voice
+    telegram_client: TelegramClient
+    gcs_storage: GCSStorage
+    transcriber: VoiceTranscriber | None
+    job_storage: VoiceJobStorage | None
+    persistence_record_event: Callable[[EventRecord], None] | None
+
+
+class VoiceTranscriptionHandler:
+    """Telegram dispatcher entry point for voice transcription."""
+
+    name = "voice_transcription.transcribe"
+    description = "Send me a voice memo — I'll reply with a transcript, summary, and emotion read."
+    help_usage = "Record a voice memo (under 10 min)"
+
+    def __init__(
+        self,
+        *,
+        scheduler: Scheduler = asyncio.create_task,
+        gcs_storage_factory: Callable[[], GCSStorage] = get_gcs_storage,
+        telegram_client_factory: Callable[[], TelegramClient] = get_telegram_client,
+        transcriber_factory: Callable[[], VoiceTranscriber | None] = get_voice_transcriber,
+        job_storage_factory: Callable[[], VoiceJobStorage | None] = (
+            lambda: _build_job_storage_or_none()
+        ),
+    ) -> None:
+        self._schedule = scheduler
+        self._gcs_factory = gcs_storage_factory
+        self._tg_factory = telegram_client_factory
+        self._transcriber_factory = transcriber_factory
+        self._jobs_factory = job_storage_factory
+
+    def matches(self, update: ParsedUpdate, _ctx: BotContext) -> bool:
+        if not isinstance(update, PrivateMessage | GroupMessage | SupergroupMessage):
+            return False
+        return isinstance(update.content, VoiceContent)
+
+    async def handle(self, update: ParsedUpdate, ctx: BotContext) -> HandlerResult:
+        assert isinstance(update, PrivateMessage | GroupMessage | SupergroupMessage)
+        assert isinstance(update.content, VoiceContent)
+        voice = update.content.voice
+
+        telegram_client = self._tg_factory()
+
+        if voice.duration > MAX_DURATION_SECONDS:
+            with contextlib.suppress(TelegramSendError):
+                await telegram_client.send_message(
+                    chat_id=update.chat_id,
+                    text=_ERROR_TOO_LONG,
+                    reply_to_message_id=update.message_id,
+                )
+            return HandlerResult(handled=True, handler_name=self.name)
+
+        if voice.file_size is not None and voice.file_size > MAX_FILE_SIZE_BYTES:
+            with contextlib.suppress(TelegramSendError):
+                await telegram_client.send_message(
+                    chat_id=update.chat_id,
+                    text=_ERROR_TOO_LARGE,
+                    reply_to_message_id=update.message_id,
+                )
+            return HandlerResult(handled=True, handler_name=self.name)
+
+        try:
+            await telegram_client.send_message(
+                chat_id=update.chat_id,
+                text=ACK_TEXT,
+                reply_to_message_id=update.message_id,
+            )
+        except TelegramSendError as exc:
+            _logger.warning(
+                "voice_transcription_ack_failed",
+                extra={
+                    "chat_id": update.chat_id,
+                    "error": f"{type(exc).__name__}: {exc}",
+                },
+            )
+
+        with contextlib.suppress(TelegramSendError):
+            await telegram_client.set_message_reaction(
+                chat_id=update.chat_id,
+                message_id=update.message_id,
+                emoji=ACK_REACTION,
+            )
+
+        bg = _BackgroundContext(
+            bot_id=ctx.bot_id,
+            chat_id=update.chat_id,
+            user_id=update.from_user.id,
+            message_id=update.message_id,
+            voice=voice,
+            telegram_client=telegram_client,
+            gcs_storage=self._gcs_factory(),
+            transcriber=self._transcriber_factory(),
+            job_storage=self._jobs_factory(),
+            persistence_record_event=(
+                ctx.persistence.record_event if ctx.persistence is not None else None
+            ),
+        )
+        self._schedule(_run_background(bg))
+
+        return HandlerResult(handled=True, handler_name=self.name)
+
+
+async def _run_background(ctx: _BackgroundContext) -> None:
+    """Download → upload → transcribe → analyze → send. Never raises."""
+    job_id: int | None = None
+    if ctx.job_storage is not None:
+        try:
+            job_id = await ctx.job_storage.insert_pending(
+                JobRow(
+                    bot_id=ctx.bot_id,
+                    chat_id=ctx.chat_id,
+                    user_id=ctx.user_id,
+                    message_id=ctx.message_id,
+                    telegram_file_id=ctx.voice.file_id,
+                    telegram_file_unique_id=ctx.voice.file_unique_id,
+                    duration_seconds=ctx.voice.duration,
+                    file_size_bytes=ctx.voice.file_size,
+                    mime_type=ctx.voice.mime_type,
+                )
+            )
+        except Exception as exc:  # noqa: BLE001
+            _logger.warning(
+                "voice_transcription_job_insert_failed",
+                extra={"exception_type": type(exc).__name__},
+            )
+            job_id = None
+
+    user_facing_error: str | None = None
+    error_class: str | None = None
+    error_message: str | None = None
+    audio_bytes: bytes | None = None
+    gcs_uri: str | None = None
+    object_key: str | None = None
+    transcript: str | None = None
+    summary: str | None = None
+    emotion: str | None = None
+    telegram_reply_message_id: int | None = None
+
+    if ctx.transcriber is None:
+        user_facing_error = _ERROR_TRANSCRIBER_UNAVAILABLE
+        error_class = "TranscriberUnavailable"
+        error_message = "OPENAI_API_KEY not configured"
+
+    if user_facing_error is None:
+        await _safe_status(ctx.job_storage, job_id, "downloading")
+        try:
+            file_path = await ctx.telegram_client.get_file_path(ctx.voice.file_id)
+            audio_bytes = await ctx.telegram_client.download_file(file_path)
+        except TelegramFileError as exc:
+            error_class = type(exc).__name__
+            error_message = str(exc)
+            user_facing_error = _ERROR_DOWNLOAD_FAILED
+
+    if user_facing_error is None and audio_bytes is not None:
+        await _safe_status(ctx.job_storage, job_id, "uploading")
+        ext = _ext_for_mime(ctx.voice.mime_type)
+        object_key = (
+            f"voice_transcription_requests/{ctx.chat_id}/{ctx.message_id}/"
+            f"voice_{ctx.voice.file_unique_id}{ext}"
+        )
+        try:
+            gcs_uri = await ctx.gcs_storage.upload(
+                object_key=object_key,
+                data=audio_bytes,
+                content_type=ctx.voice.mime_type or "audio/ogg",
+            )
+        except Exception as exc:  # noqa: BLE001
+            error_class = type(exc).__name__
+            error_message = str(exc)
+            user_facing_error = _ERROR_GENERIC
+
+    if user_facing_error is None and audio_bytes is not None:
+        assert ctx.transcriber is not None
+        await _safe_status(ctx.job_storage, job_id, "transcribing")
+        try:
+            transcript = await ctx.transcriber.transcribe(
+                audio_bytes,
+                filename=f"voice_{ctx.voice.file_unique_id}{_ext_for_mime(ctx.voice.mime_type)}",
+            )
+        except TranscriptionError as exc:
+            error_class = type(exc).__name__
+            error_message = str(exc)
+            user_facing_error = _ERROR_TRANSCRIPTION_FAILED
+
+    if user_facing_error is None and transcript is not None:
+        assert ctx.transcriber is not None
+        await _safe_status(ctx.job_storage, job_id, "analyzing")
+        try:
+            analysis = await ctx.transcriber.analyze(transcript)
+        except AnalysisError as exc:
+            error_class = type(exc).__name__
+            error_message = str(exc)
+            user_facing_error = _ERROR_ANALYSIS_FAILED
+        else:
+            summary = analysis.summary
+            emotion = analysis.emotion
+
+    if (
+        user_facing_error is None
+        and transcript is not None
+        and summary is not None
+        and emotion is not None
+    ):
+        await _safe_status(ctx.job_storage, job_id, "sending")
+        reply_text = _REPLY_TEMPLATE.format(
+            summary=summary,
+            emotion=emotion,
+            transcript=transcript,
+        )
+        try:
+            sent = await ctx.telegram_client.send_message(
+                chat_id=ctx.chat_id,
+                text=reply_text,
+                reply_to_message_id=ctx.message_id,
+            )
+            telegram_reply_message_id = (
+                int(sent["message_id"]) if isinstance(sent, dict) and "message_id" in sent else None
+            )
+        except TelegramSendError as exc:
+            error_class = type(exc).__name__
+            error_message = str(exc)
+            user_facing_error = _ERROR_GENERIC
+
+    if user_facing_error is None and transcript is not None:
+        assert summary is not None and emotion is not None and object_key is not None
+        if job_id is not None and ctx.job_storage is not None:
+            try:
+                await ctx.job_storage.mark_succeeded(
+                    job_id,
+                    gcs_object_path=object_key,
+                    transcript=transcript,
+                    summary=summary,
+                    emotion=emotion,
+                    telegram_reply_message_id=telegram_reply_message_id,
+                )
+            except Exception:  # noqa: BLE001
+                _logger.exception("voice_transcription_mark_succeeded_failed")
+        _record_event(
+            ctx,
+            event="voice_transcription_succeeded",
+            status="success",
+            details=f"{object_key} {len(transcript)}chars",
+            occurred_at=datetime.now(UTC),
+        )
+        _ = gcs_uri  # used only to validate upload happened
+        return
+
+    # Failure path.
+    if user_facing_error is not None:
+        with contextlib.suppress(TelegramSendError):
+            await ctx.telegram_client.send_message(
+                chat_id=ctx.chat_id,
+                text=user_facing_error,
+                reply_to_message_id=ctx.message_id,
+            )
+        if job_id is not None and ctx.job_storage is not None:
+            try:
+                await ctx.job_storage.mark_failed(
+                    job_id,
+                    error_class=error_class or "Unknown",
+                    error_message=error_message or "",
+                )
+            except Exception:  # noqa: BLE001
+                _logger.exception("voice_transcription_mark_failed_failed")
+        _record_event(
+            ctx,
+            event="voice_transcription_failed",
+            status="error",
+            details=f"{error_class}: {error_message}",
+            occurred_at=datetime.now(UTC),
+        )
+
+
+def _ext_for_mime(mime_type: str | None) -> str:
+    """Best-effort file extension. Defaults to .ogg (Telegram voice memos)."""
+    if mime_type is None:
+        return ".ogg"
+    if "ogg" in mime_type:
+        return ".ogg"
+    if "mpeg" in mime_type or "mp3" in mime_type:
+        return ".mp3"
+    if "wav" in mime_type:
+        return ".wav"
+    if "m4a" in mime_type or "mp4" in mime_type:
+        return ".m4a"
+    return ".ogg"
+
+
+async def _safe_status(jobs: VoiceJobStorage | None, job_id: int | None, status: str) -> None:
+    if jobs is None or job_id is None:
+        return
+    try:
+        await jobs.update_status(job_id, status)  # type: ignore[arg-type]
+    except Exception:  # noqa: BLE001
+        _logger.exception("voice_transcription_status_update_failed")
+
+
+def _record_event(
+    ctx: _BackgroundContext,
+    *,
+    event: str,
+    status: str,
+    details: str,
+    occurred_at: datetime,
+) -> None:
+    if ctx.persistence_record_event is None:
+        return
+    try:
+        ctx.persistence_record_event(
+            EventRecord(
+                bot_id=ctx.bot_id,
+                event=event,
+                status=status,
+                details=details,
+                occurred_at=occurred_at,
+            )
+        )
+    except Exception:  # noqa: BLE001
+        _logger.exception("voice_transcription_record_event_failed")
+
+
+def _build_job_storage_or_none() -> VoiceJobStorage | None:
+    storage = get_postgres_storage()
+    if storage is None:
+        return None
+    return VoiceJobStorage(storage)
+
+
+@lru_cache(maxsize=1)
+def get_voice_transcription_handler() -> VoiceTranscriptionHandler:
+    """Process-wide singleton, wired with production dependencies."""
+    return VoiceTranscriptionHandler()

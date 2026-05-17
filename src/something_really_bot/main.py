@@ -37,6 +37,9 @@ from something_really_bot.features.tiktok_reminder.handler import TikTokReminder
 from something_really_bot.features.video_downloader.handler import (
     get_video_downloader_handler,
 )
+from something_really_bot.features.voice_transcription.handler import (
+    get_voice_transcription_handler,
+)
 from something_really_bot.file_storage.fetcher import get_file_fetcher
 from something_really_bot.logging import configure_logging, get_logger
 from something_really_bot.persistence import (
@@ -84,6 +87,9 @@ def build_default_dispatcher() -> Dispatcher:
     dispatcher.register(StartCommandHandler())
     dispatcher.register(HelpCommandHandler(HelpRegistry(lambda: dispatcher.handlers)))
     dispatcher.register(FileStorageHandler())
+    # Voice transcription owns voice content (#43); FileStorageHandler
+    # above intentionally does not match VoiceContent.
+    dispatcher.register(get_voice_transcription_handler())
     # Video downloader must precede the OpenAI fallback so a Reel/TikTok
     # URL in plain text doesn't get routed to the LLM.
     dispatcher.register(get_video_downloader_handler())
