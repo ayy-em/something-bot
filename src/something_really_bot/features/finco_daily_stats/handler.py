@@ -110,11 +110,15 @@ class FinCoDailyStatsJob:
             return None
 
         ga4 = part.ga4
-        site_lines = [f"  Visitors: {ga4.total_users:,} (new: {ga4.new_users:,})"]
+        site_lines = [
+            f"  Visitors: {ga4.total_users:,} ({ga4.new_users:,} new), "
+            f"{ga4.total_users_7d:,} last 7 days"
+        ]
         if ga4.top_pages:
             site_lines.append("  Top pages:")
             for idx, page in enumerate(ga4.top_pages, start=1):
-                site_lines.append(f"    {idx}. {page.page_path} — {page.views:,}")
+                display_path = page.page_path.removeprefix("/") or "/"
+                site_lines.append(f"    {idx}. {display_path} — {page.views:,}")
 
         header = f"{site.label} ({site.domain})"
         return "\n".join([header, *site_lines])

@@ -52,7 +52,13 @@ class _FakeGA4Client:
 
 
 async def test_fetch_site_metrics_parses_two_run_report_responses() -> None:
-    totals = _Response(rows=[_Row(metric_values=[_MetricValue("1234"), _MetricValue("412")])])
+    # First call returns one row per dateRange: day, then 7-day trailing window.
+    totals = _Response(
+        rows=[
+            _Row(metric_values=[_MetricValue("1234"), _MetricValue("412")]),
+            _Row(metric_values=[_MetricValue("8765"), _MetricValue("3000")]),
+        ]
+    )
     pages = _Response(
         rows=[
             _Row(
@@ -73,9 +79,19 @@ async def test_fetch_site_metrics_parses_two_run_report_responses() -> None:
 
     assert result.total_users == 1234
     assert result.new_users == 412
+    assert result.total_users_7d == 8765
     assert [p.page_path for p in result.top_pages] == ["/pricing", "/about"]
     assert [p.views for p in result.top_pages] == [312, 220]
     assert len(client.calls) == 2
+
+    # The totals call must pass both date ranges; the 7-day range ends at
+    # end_date and spans 7 days inclusive.
+    totals_call = client.calls[0]
+    assert len(totals_call.date_ranges) == 2
+    assert totals_call.date_ranges[0].start_date == "2026-05-16"
+    assert totals_call.date_ranges[0].end_date == "2026-05-16"
+    assert totals_call.date_ranges[1].start_date == "2026-05-10"
+    assert totals_call.date_ranges[1].end_date == "2026-05-16"
 
 
 async def test_fetch_site_metrics_handles_empty_responses() -> None:
@@ -87,6 +103,7 @@ async def test_fetch_site_metrics_handles_empty_responses() -> None:
 
     assert result.total_users == 0
     assert result.new_users == 0
+    assert result.total_users_7d == 0
     assert result.top_pages == ()
 
 

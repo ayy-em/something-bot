@@ -95,14 +95,17 @@ async def test_run_happy_path_two_sites() -> None:
             "111": SiteMetrics(
                 total_users=1234,
                 new_users=412,
+                total_users_7d=8765,
                 top_pages=(
                     TopPage(page_path="/pricing", views=312),
                     TopPage(page_path="/about", views=220),
+                    TopPage(page_path="/", views=99),
                 ),
             ),
             "222": SiteMetrics(
                 total_users=567,
                 new_users=200,
+                total_users_7d=4123,
                 top_pages=(TopPage(page_path="/home", views=88),),
             ),
         }
@@ -118,8 +121,11 @@ async def test_run_happy_path_two_sites() -> None:
     assert "2026-05-16" in text
     assert "A (a.example)" in text
     assert "B (b.example)" in text
-    assert "Visitors: 1,234 (new: 412)" in text
-    assert "/pricing — 312" in text
+    assert "Visitors: 1,234 (412 new), 8,765 last 7 days" in text
+    assert "pricing — 312" in text
+    assert "/pricing" not in text
+    # Root path keeps a slash so the line is not empty.
+    assert "/ — 99" in text
 
     assert len(persistence.responses) == 1
     row = persistence.responses[0]
@@ -134,7 +140,7 @@ async def test_run_omits_failed_ga4_lines_for_one_site() -> None:
     ga4 = _ga4_fetcher_for(
         {
             "111": GoogleAnalyticsError("boom"),
-            "222": SiteMetrics(total_users=10, new_users=2, top_pages=()),
+            "222": SiteMetrics(total_users=10, new_users=2, total_users_7d=70, top_pages=()),
         }
     )
     job = FinCoDailyStatsJob(sites=TWO_SITES, ga4_fetcher=ga4, now=_fixed_now)
@@ -169,7 +175,7 @@ async def test_run_sends_no_data_today_when_all_ga4_calls_fail() -> None:
 async def test_run_does_nothing_when_chat_id_missing() -> None:
     tg = _FakeTelegramClient()
     persistence = _RecordingPersistence()
-    ga4 = _ga4_fetcher_for({"111": SiteMetrics(0, 0, ())})
+    ga4 = _ga4_fetcher_for({"111": SiteMetrics(0, 0, 0, ())})
     job = FinCoDailyStatsJob(sites=(SITE_A,), ga4_fetcher=ga4, now=_fixed_now)
 
     await job.run(_ctx(chat_id=None, telegram_client=tg, persistence=persistence))
@@ -181,7 +187,7 @@ async def test_run_does_nothing_when_chat_id_missing() -> None:
 async def test_run_persists_failure_when_send_raises_and_does_not_propagate() -> None:
     tg = _FakeTelegramClient(raises=RuntimeError("network down"))
     persistence = _RecordingPersistence()
-    ga4 = _ga4_fetcher_for({"111": SiteMetrics(1, 1, ())})
+    ga4 = _ga4_fetcher_for({"111": SiteMetrics(1, 1, 7, ())})
     job = FinCoDailyStatsJob(sites=(SITE_A,), ga4_fetcher=ga4, now=_fixed_now)
 
     # Must not raise — Cloud Scheduler would retry and double-send.
@@ -197,7 +203,7 @@ async def test_run_persists_failure_when_send_raises_and_does_not_propagate() ->
 
 async def test_run_handles_missing_telegram_client() -> None:
     persistence = _RecordingPersistence()
-    ga4 = _ga4_fetcher_for({"111": SiteMetrics(1, 1, ())})
+    ga4 = _ga4_fetcher_for({"111": SiteMetrics(1, 1, 7, ())})
     job = FinCoDailyStatsJob(sites=(SITE_A,), ga4_fetcher=ga4, now=_fixed_now)
 
     await job.run(_ctx(telegram_client=None, persistence=persistence))
@@ -218,7 +224,7 @@ async def test_run_swallows_persistence_failure() -> None:
         def record_event(self, _r: Any) -> None: ...
 
     tg = _FakeTelegramClient()
-    ga4 = _ga4_fetcher_for({"111": SiteMetrics(1, 1, ())})
+    ga4 = _ga4_fetcher_for({"111": SiteMetrics(1, 1, 7, ())})
     job = FinCoDailyStatsJob(sites=(SITE_A,), ga4_fetcher=ga4, now=_fixed_now)
 
     await job.run(_ctx(telegram_client=tg, persistence=_BadPersistence()))
