@@ -86,9 +86,7 @@ class PostgresStorage:
     async def execute(self, sql: str, params: tuple[Any, ...] = ()) -> None:
         await self._run(lambda conn: self._exec(conn, sql, params))
 
-    async def fetch_all(
-        self, sql: str, params: tuple[Any, ...] = ()
-    ) -> list[dict[str, Any]]:
+    async def fetch_all(self, sql: str, params: tuple[Any, ...] = ()) -> list[dict[str, Any]]:
         return await self._run(lambda conn: self._fetch(conn, sql, params))
 
     async def insert_row(self, table: str, row: Mapping[str, Any]) -> None:
@@ -106,10 +104,7 @@ class PostgresStorage:
 
         columns = ", ".join(f'"{c}"' for c in row)
         placeholders = ", ".join(["%s"] * len(row))
-        sql = (
-            f'INSERT INTO "{self._schema}"."{table}" ({columns}) '
-            f"VALUES ({placeholders})"
-        )
+        sql = f'INSERT INTO "{self._schema}"."{table}" ({columns}) VALUES ({placeholders})'
         await self.execute(sql, tuple(row.values()))
 
     # --------------------------------------------------------------- #

@@ -78,9 +78,7 @@ async def test_ensure_schema_runs_create_schema_if_not_exists() -> None:
 
     await storage.ensure_schema()
 
-    assert conn.cursor_obj.executed == [
-        ('CREATE SCHEMA IF NOT EXISTS "something_bot"', ())
-    ]
+    assert conn.cursor_obj.executed == [('CREATE SCHEMA IF NOT EXISTS "something_bot"', ())]
     assert conn.committed is True
     assert conn.closed is True
 
@@ -132,9 +130,7 @@ async def test_fetch_all_returns_rows_as_dicts() -> None:
 
 
 async def test_driver_exception_funnels_to_postgres_error_and_rolls_back() -> None:
-    conn = _FakeConnection(
-        cursor_obj=_FakeCursor(raise_on_execute=RuntimeError("connection lost"))
-    )
+    conn = _FakeConnection(cursor_obj=_FakeCursor(raise_on_execute=RuntimeError("connection lost")))
     storage = _storage_with(conn)
 
     with pytest.raises(PostgresError) as excinfo:
@@ -189,6 +185,4 @@ def test_default_factory_omits_host_kwarg_when_no_instance(
     storage = PostgresStorage(dsn=SecretStr("postgres://u:p@localhost:5432/db"))
     storage._default_factory()
 
-    assert calls == [
-        (("postgres://u:p@localhost:5432/db",), {"autocommit": False})
-    ]
+    assert calls == [(("postgres://u:p@localhost:5432/db",), {"autocommit": False})]
