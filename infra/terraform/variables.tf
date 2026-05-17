@@ -91,7 +91,7 @@ variable "bigquery_location" {
 }
 
 variable "openai_api_key_secret_name" {
-  description = "Existing Secret Manager secret holding the OpenAI API key. Upper-snake-cased intentionally to match the legacy app.yaml env var name."
+  description = "Existing Secret Manager secret holding the OpenAI API key. Upper-snake-cased to match the env var name injected into Cloud Run."
   type        = string
   default     = "OPENAI_API_KEY"
 }

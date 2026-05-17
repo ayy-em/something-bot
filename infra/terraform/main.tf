@@ -20,6 +20,15 @@ locals {
     "roles/run.admin",
   ]
 
+  # Read-only roles for the planner SA used by `terraform plan` in CI
+  # (#29). The planner must be able to *read* every resource type the
+  # plan touches (IAM, secrets, Cloud Run, etc.) but never mutate them.
+  planner_project_roles = [
+    "roles/viewer",
+    "roles/iam.securityReviewer",
+    "roles/secretmanager.viewer",
+  ]
+
   webhook_secret_ids = {
     for key, _ in var.bots : key => "telegram-webhook-secret-${key}"
   }
@@ -107,6 +116,15 @@ resource "google_service_account" "deployer" {
   depends_on = [google_project_service.enabled]
 }
 
+resource "google_service_account" "planner" {
+  project      = var.project_id
+  account_id   = "something-bot-planner-sa"
+  display_name = "Something Dashboard bot — GitHub Actions Terraform planner"
+  description  = "Assumed by GitHub Actions via WIF to run read-only `terraform plan` (#29). Strictly read-only — see locals.planner_project_roles."
+
+  depends_on = [google_project_service.enabled]
+}
+
 # --------------------------------------------------------------------------- #
 # Workload Identity Federation for GitHub Actions
 # --------------------------------------------------------------------------- #
@@ -152,6 +170,20 @@ resource "google_project_iam_member" "deployer" {
   project = var.project_id
   role    = each.value
   member  = "serviceAccount:${google_service_account.deployer.email}"
+}
+
+resource "google_service_account_iam_member" "planner_wif" {
+  service_account_id = google_service_account.planner.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.repository/${var.github_repo}"
+}
+
+resource "google_project_iam_member" "planner" {
+  for_each = toset(local.planner_project_roles)
+
+  project = var.project_id
+  role    = each.value
+  member  = "serviceAccount:${google_service_account.planner.email}"
 }
 
 # --------------------------------------------------------------------------- #

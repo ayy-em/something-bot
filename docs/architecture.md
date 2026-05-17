@@ -32,10 +32,7 @@ What exists in the repo today:
   `.github/workflows/`. The deploy workflow injects
   `TELEGRAM_WEBHOOK_SECRET` into Cloud Run via Secret Manager.
 
-The legacy Python 3.9 / Flask / App Engine code has been removed (#11) —
-anything that was in `channel/`, `fc/`, `reminders/`, `stuff_for_ira/`,
-`utils/`, or `main.py` is in git history if needed for migration
-reference.
+The pre-May 2026 Python 3.9 / Flask / App Engine implementation is in git history (everything pre-#11) if migration reference is needed.
 
 ## Layer boundaries (target)
 

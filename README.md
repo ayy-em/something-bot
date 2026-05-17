@@ -4,9 +4,9 @@ Talk to me at https://t.me/SomethingReallyBot at any time, day and night, baby, 
 
 ## Status
 
-Mid-rebuild. The bot is being re-implemented from scratch as a Python 3.12 / FastAPI service running on Google Cloud Run. The authoritative target state is [`SPEC.md`](./SPEC.md); incremental progress is tracked via GitHub issues.
+Live. The bot is a Python 3.12 / FastAPI service on Google Cloud Run. The authoritative target state is [`SPEC.md`](./SPEC.md); incremental progress is tracked via GitHub issues.
 
-The legacy Python 3.9 / Flask / App Engine implementation has been removed; references to specific legacy features live in the migration issues (#21–#27). Anything not yet re-implemented is broken on the live bot until the corresponding feature issue lands.
+Pre-May 2026 the bot was a Python 3.9 / Flask app on Google App Engine with cron jobs; that implementation has been fully removed.
 
 ## Tech stack
 
@@ -89,7 +89,7 @@ Three GitHub Actions workflows live under `.github/workflows/`:
 | `GCP_WORKLOAD_IDENTITY_PROVIDER` | `terraform output -raw workload_identity_provider` |
 | `GCP_DEPLOYER_SERVICE_ACCOUNT` | `terraform output -raw deployer_service_account_email` |
 
-No long-lived JSON service-account keys. The legacy `GOOGLE_APPLICATION_CREDENTIALS` secret retires after the first successful OIDC deploy.
+No long-lived JSON service-account keys. WIF-only.
 
 ### One-time setup checklist (manual)
 
@@ -98,8 +98,7 @@ Before the first deploy can succeed, you need to have already done the steps bel
 1. Apply the Terraform from `infra/terraform/` (see [`infra/terraform/README.md`](./infra/terraform/README.md) for the bootstrap commands).
 2. Read the two outputs above and set them as repo secrets in GitHub.
 3. Push to `master` (or merge a PR) to trigger the first deploy.
-4. Once Cloud Run reports the new image deployed, run the `Set Telegram webhook` workflow from the Actions tab — but **only after** the `/webhook` route exists (lands in #10), otherwise Telegram will be pointed at a 404.
-5. Retire `GOOGLE_APPLICATION_CREDENTIALS` from repo secrets and rotate the underlying GCP service account key.
+4. Once Cloud Run reports the new image deployed, run the `Set Telegram webhook` workflow from the Actions tab.
 
 ## Channels you should totally check out
 
