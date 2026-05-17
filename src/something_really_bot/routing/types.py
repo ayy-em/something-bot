@@ -10,6 +10,10 @@ from typing import Any, Protocol, runtime_checkable
 from something_really_bot.config import Settings
 from something_really_bot.file_storage import FileFetcher
 from something_really_bot.persistence import PersistenceService
+from something_really_bot.services.pending_actions import (
+    PendingAction,
+    PendingActionStore,
+)
 from something_really_bot.telegram.models import ParsedUpdate
 
 
@@ -21,6 +25,11 @@ class BotContext:
     handles are pre-declared as ``None`` placeholders so the shape is stable
     and the issues that introduce them (#15, #18, #20) only add wiring, not
     type churn.
+
+    ``pending_action`` is pre-resolved by the webhook orchestrator so
+    ``Handler.matches()`` (which is synchronous) can read it without an
+    awaitable call. ``None`` means "no un-expired pending action for this
+    (chat, user)."
     """
 
     settings: Settings
@@ -29,6 +38,8 @@ class BotContext:
     persistence: PersistenceService | None = None
     file_fetcher: FileFetcher | None = None
     openai_client: Any | None = None
+    pending_action: PendingAction | None = None
+    pending_action_store: PendingActionStore | None = None
 
 
 @dataclass(frozen=True)

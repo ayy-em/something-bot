@@ -28,6 +28,9 @@ from something_really_bot.features.commands.handler import (
     HelpCommandHandler,
     StartCommandHandler,
 )
+from something_really_bot.features.dutch_translation.handler import (
+    get_dutch_translation_handler,
+)
 from something_really_bot.features.example.handler import PingHandler
 from something_really_bot.features.file_storage.handler import FileStorageHandler
 from something_really_bot.features.finco_daily_stats.handler import FinCoDailyStatsJob
@@ -56,6 +59,10 @@ from something_really_bot.routing.help_registry import HelpRegistry
 from something_really_bot.routing.types import BotContext, HandlerResult
 from something_really_bot.services.jobs import JobRegistry, UnknownJobError
 from something_really_bot.services.openai_client import get_openai_client
+from something_really_bot.services.pending_actions import (
+    get_pending_action_store,
+    safe_get_pending_action,
+)
 from something_really_bot.services.scheduler_auth import verify_scheduler_oidc_token
 from something_really_bot.telegram.client import get_telegram_client
 from something_really_bot.telegram.models import (
@@ -90,6 +97,9 @@ def build_default_dispatcher() -> Dispatcher:
     # Voice transcription owns voice content (#43); FileStorageHandler
     # above intentionally does not match VoiceContent.
     dispatcher.register(get_voice_transcription_handler())
+    # Command-driven workflows: /dutch claims its trigger + follow-up
+    # text replies via pending_action state (#47).
+    dispatcher.register(get_dutch_translation_handler())
     # Video downloader must precede the OpenAI fallback so a Reel/TikTok
     # URL in plain text doesn't get routed to the LLM.
     dispatcher.register(get_video_downloader_handler())
@@ -180,12 +190,14 @@ async def webhook(
     """Receive, persist, dispatch, send a reply, and persist the response."""
     received_at = datetime.now(UTC)
     raw = await _safe_json(request)
+    pending_action_store = get_pending_action_store()
     ctx = BotContext(
         settings=settings,
         telegram_client=get_telegram_client(),
         persistence=get_persistence_service(),
         file_fetcher=get_file_fetcher(),
         openai_client=get_openai_client(),
+        pending_action_store=pending_action_store,
     )
 
     try:
@@ -212,11 +224,38 @@ async def webhook(
     if file_record is not None:
         _safe_persist_file(ctx.persistence, file_record)
 
-    result = await dispatcher.dispatch(parsed, ctx)
-    await _send_and_persist_reply(parsed, result, ctx, received_at)
-    _emit_dispatch_events(parsed, result, ctx, received_at)
+    # Resolve pending workflow state for the sender (if any) before
+    # dispatch so handlers can read it synchronously from matches().
+    pending_action = await _resolve_pending_action(parsed, ctx, pending_action_store)
+    ctx_with_pending = (
+        ctx if pending_action is None else _replace_pending_action(ctx, pending_action)
+    )
+
+    result = await dispatcher.dispatch(parsed, ctx_with_pending)
+    await _send_and_persist_reply(parsed, result, ctx_with_pending, received_at)
+    _emit_dispatch_events(parsed, result, ctx_with_pending, received_at)
 
     return {"status": "ok"}
+
+
+async def _resolve_pending_action(parsed: ParsedUpdate, ctx: BotContext, store: Any) -> Any | None:
+    if store is None:
+        return None
+    if not isinstance(parsed, PrivateMessage | GroupMessage | SupergroupMessage):
+        return None
+    return await safe_get_pending_action(
+        store,
+        bot_id=ctx.bot_id,
+        chat_id=parsed.chat_id,
+        user_id=parsed.from_user.id,
+    )
+
+
+def _replace_pending_action(ctx: BotContext, pending_action: Any) -> BotContext:
+    """Return a copy of ``ctx`` with ``pending_action`` populated."""
+    from dataclasses import replace
+
+    return replace(ctx, pending_action=pending_action)
 
 
 # --------------------------------------------------------------------------- #

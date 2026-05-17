@@ -658,6 +658,61 @@ explicit message so the bot isn't silent if config drifts.
 
 ---
 
+## 6.13 Command Workflow State
+
+Command-driven features that take input across multiple turns
+(`/dutch`, `/make-sticker`, `/ocr`, `/summarize`) need to remember
+"this user just invoked ``/foo`` and their next message is the input."
+This is captured in a shared Postgres table `public.pending_user_actions`,
+keyed on `(bot_id, chat_id, user_id)`:
+
+| Column            | Notes                                                        |
+| ----------------- | ------------------------------------------------------------ |
+| `bot_id`          | which bot is in the conversation                             |
+| `chat_id`         | originating chat (DM or group)                               |
+| `user_id`         | which user is mid-flow                                       |
+| `command`         | the registered command name (e.g. `"dutch"`)                 |
+| `expected_input`  | `text` \| `image` \| `document` \| `voice`                    |
+| `metadata`        | JSONB — feature-specific extras                              |
+| `created_at`      | TIMESTAMPTZ                                                  |
+| `expires_at`      | TIMESTAMPTZ — 10 minutes by default                          |
+
+PK is `(bot_id, chat_id, user_id)`, so setting a new pending action
+atomically replaces any prior one for that user (no orphan rows).
+`get()` filters with `expires_at > now()`, so expired rows are simply
+ignored (no janitor required).
+
+The webhook orchestrator resolves the pending action *before* dispatch
+and puts it on `BotContext.pending_action`; handlers read it
+synchronously from `matches()`. After processing, the handler clears
+or advances the state via the async store.
+
+Lives in `public` consistent with the convention #42 / #43 settled on
+for cross-feature tables.
+
+This is the first slice of #48's "conversation/workflow state" scope.
+Other pieces of #48 (shared error mapper, generalized reply helper,
+shared test fixtures) remain on the backlog.
+
+---
+
+## 6.14 /dutch — Dutch to English Translation (#47)
+
+Two-turn command that translates Dutch text to English via OpenAI.
+
+* `/dutch <text>` — translate the inline argument immediately.
+* `/dutch` alone — prompt the user and wait up to 10 minutes for a
+  follow-up text message from the same user (`pending_user_actions`
+  TTL). Next text gets translated and the pending row is cleared.
+
+Works in DMs, groups, and supergroups. Reply is the translation only,
+italicized, no preamble — `parse_mode="HTML"`, content `html.escape`-d.
+
+See `src/something_really_bot/features/dutch_translation/README.md` for
+the error matrix and lifecycle details.
+
+---
+
 ## 7. Scheduled Jobs
 
 Cron-style work runs via Cloud Scheduler hitting `POST /jobs/{name}` on Cloud Run (#22). Each job is a `JobHandler` registered in `main.py`; the scheduler is defined in `infra/terraform/scheduler.tf` (one entry per job). OIDC verification on the route ensures only the scheduler SA can invoke it.
