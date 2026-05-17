@@ -10,6 +10,8 @@ on:
 
 permissions:
   contents: read
+  id-token: write
+  pull-requests: write
 
 env:
   PROJECT_ID: something-bot-338300
@@ -22,6 +24,7 @@ env:
 jobs:
   checks:
     uses: ./.github/workflows/_checks.yml
+    secrets: inherit
 
   preflight:
     name: Deploy preflight (secrets configured?)
