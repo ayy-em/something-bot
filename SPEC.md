@@ -2,11 +2,9 @@
 
 ## 1. Purpose
 
-This document defines the specification for rebuilding the existing **Something Really Bot**, a Telegram personal assistant bot, from scratch inside the existing repository.
+This document defines the specification for **Something Really Bot**, a Telegram personal assistant bot. Pre-May 2026 the bot was a Python 3.9 / Flask app on Google App Engine with Cloud Scheduler-style cron jobs; it has been rebuilt as a Python 3.12 service on Google Cloud Run. The legacy implementation is no longer referenced.
 
-The current implementation is a Python 3.9 application running on **Google App Engine**, with Telegram webhook handling and cron jobs defined through App Engine / Cloud Scheduler-style configuration. The existing codebase is considered messy and should not be incrementally refactored. The target state is a clean, extensible, tested Python 3.12 service deployed to **Google Cloud Run**.
-
-The primary intended reader of this specification is an AI coding agent that will use this specification to create a roadmap, break the work into issues, and implement the rebuild.
+The intended reader is an AI coding agent or maintainer working on the current implementation.
 
 ---
 
@@ -28,29 +26,9 @@ The first deploy should be intentionally minimal but structurally sound:
 
 ---
 
-## 3. Current State
+## 3. History
 
-### 3.1 Existing Application
-
-The existing bot:
-
-* Lives in the current **Something Dashboard** repository.
-* Runs on Python 3.9.
-* Is deployed to Google App Engine.
-* Uses Telegram Bot API via webhook.
-* Has cron-style scheduled functionality, with existing cron configuration to be provided separately.
-* Contains legacy functionality to be migrated later.
-* Has messy code that should be replaced rather than refactored in place.
-
-### 3.2 Migration Input Format
-
-The existing functionality will be provided separately as a list of references in the following shape upon agent's request:
-
-```text
-<file path or code reference> — <short summary of current functionality>
-```
-
-The implementation agent must use that list during the feature discovery and migration planning phase.
+The pre-rebuild bot was a Python 3.9 / Flask app on Google App Engine with cron jobs; it was deleted in PR #11. Feature-by-feature migration into the new Cloud Run service is tracked in the umbrella issue #21.
 
 ---
 
@@ -74,9 +52,7 @@ The implementation agent must use that list during the feature discovery and mig
 
 ### 4.2 Deployment Model
 
-The App Engine deployment must be fully removed and replaced by Cloud Run.
-
-The rebuild happens inside the same repository. The agent should treat the old implementation as disposable. Existing files may be deleted, moved, or replaced as needed, but the migration should be done carefully enough that useful historical logic can still be referenced before removal.
+Cloud Run is the only deployment target. The rebuild lives in this repository; the legacy implementation is gone.
 
 ### 4.3 Bot Model
 
@@ -422,6 +398,62 @@ Personal usage / very small scale. Design should be clean but not absurdly over-
 
 ---
 
+## 6.8.1 Shared Postgres Persistence
+
+Some bot features require relational primitives that BigQuery is a poor fit for (small mutable state, lookups by primary key, ad-hoc joins). For these cases the bot connects to a **shared Cloud SQL Postgres instance** that lives in a separate GCP project, used by multiple internal tools.
+
+All bot tables live under a dedicated schema (default `something_bot`) so the bot never touches other tenants' tables in the shared database.
+
+### Connection Model
+
+The bot does not whitelist Cloud Run egress IPs. Instead it uses the Cloud SQL Auth Proxy:
+
+* The deploy step passes the Cloud SQL instance connection name to `gcloud run deploy --add-cloudsql-instances`, which causes Cloud Run to mount the Auth Proxy unix socket at `/cloudsql/<instance-connection-name>/` in the container filesystem.
+* The runtime service account authenticates to the Auth Proxy via IAM (`roles/cloudsql.client` on the project that owns the instance — granted out-of-band because Terraform here only manages the bot's own project).
+* The Postgres wrapper overrides psycopg's `host` connection argument with the socket path whenever the instance connection name is present in the runtime environment, so the same DSN works for local TCP development and for socket-based Cloud Run runs.
+
+No long-lived database credentials traverse the network in plaintext; psycopg connects to the local socket and the Auth Proxy handles TLS to Cloud SQL on the bot's behalf.
+
+### Required Secrets
+
+Two Secret Manager secrets in the bot's GCP project drive the wiring:
+
+* A DSN secret holding the bot's database user, password and database name. Host:port in the DSN is ignored at runtime when the socket override is active and is only used for local TCP development.
+* An instance connection name secret holding the canonical `project:region:instance` triple. Consumed both at deploy time (to mount the Auth Proxy socket) and at runtime (to point psycopg at the socket).
+
+The runtime service account is granted `roles/secretmanager.secretAccessor` on both. The deployer service account is granted access only to the instance connection name secret, so the deploy workflow can read it on the runner without also being able to read the DSN.
+
+### Database User Model
+
+The bot uses a dedicated database user inside the shared instance with the minimum privileges needed:
+
+* `USAGE` on the schemas it accesses.
+* Appropriate DML (`SELECT`, `INSERT`, `UPDATE`, `DELETE`) on those schemas.
+* `CREATE` on the database is optional and only required if `ensure_schema()` is expected to create the bot's schema on first run; otherwise the schema is pre-created out-of-band.
+
+The bot must never assume superuser-level privileges and must not attempt cross-tenant access in the shared instance.
+
+### Wrapper Requirements
+
+A single async-friendly wrapper isolates psycopg behind a narrow interface:
+
+* `ensure_schema()` — idempotent `CREATE SCHEMA IF NOT EXISTS` for the bot's schema.
+* `execute(sql, params)` — non-returning statement.
+* `fetch_all(sql, params)` — returns a list of dicts keyed by column name.
+* `insert_row(table, row)` — schema-qualified insert; identifiers are validated against an allowlist of characters before interpolation.
+
+All driver errors funnel into a single exception type so call sites can apply the §6.9 "never bubble to Telegram" rule uniformly. The synchronous psycopg driver runs inside `asyncio.to_thread` so the FastAPI event loop stays free.
+
+### Acceptance Criteria
+
+* Cloud Run routes to Postgres via the Cloud SQL Auth Proxy socket, not over public IP.
+* DSN and instance connection name are sourced from Secret Manager and never hardcoded.
+* The runtime SA has `roles/cloudsql.client` on the owning project and `secretAccessor` on both secrets; cross-project IAM is documented as a manual step.
+* The wrapper exposes a small async API and converts driver failures into a single bot-level exception type.
+* Wrapper behavior (including the socket host override) is covered by tests using fakes/mocks — no real DB required.
+
+---
+
 ## 6.9 Branching / Routing Logic
 
 The bot must contain clear branching logic for deciding how each update should be handled.
@@ -491,27 +523,9 @@ or equivalent.
 
 ---
 
-## 7. Scheduled Jobs / Cron Migration
+## 7. Scheduled Jobs
 
-The current App Engine setup includes cron-style scheduled jobs. The existing `cron.yaml` or equivalent configuration will be provided separately.
-
-The initial rebuild must include a discovery/proposal step for replacing the cron functionality.
-
-Possible target approaches:
-
-* Google Cloud Scheduler calling Cloud Run endpoints.
-* Google Cloud Scheduler publishing to Pub/Sub.
-* Cloud Run Jobs triggered by Cloud Scheduler.
-* Separate worker service.
-
-The agent must inspect the provided cron configuration and propose the simplest suitable replacement.
-
-### Acceptance Criteria
-
-* Existing cron jobs are inventoried.
-* Each cron job has a proposed target architecture.
-* Cron migration is included in the roadmap.
-* Implementation can be deferred if not required for first cutover.
+Cron-style work runs via Cloud Scheduler hitting `POST /jobs/{name}` on Cloud Run (#22). Each job is a `JobHandler` registered in `main.py`; the scheduler is defined in `infra/terraform/scheduler.tf` (one entry per job). OIDC verification on the route ensures only the scheduler SA can invoke it.
 
 ---
 
@@ -577,7 +591,12 @@ QA_TELEGRAM_USER_IDS
 GCP_PROJECT_ID
 BIGQUERY_DATASET
 GCS_BUCKET
+OPENAI_API_KEY
+POSTGRES_DSN
+POSTGRES_INSTANCE
 ```
+
+`POSTGRES_DSN` and `POSTGRES_INSTANCE` together drive the shared Cloud SQL connection described in §6.8.1: the DSN supplies user/password/database; the instance connection name is read at deploy time (passed to `--add-cloudsql-instances`) and at runtime (used to mount the Auth Proxy socket and override the DSN host). The instance secret is also readable by the deployer SA so the deploy workflow can pass it to `gcloud`.
 
 Exact naming can be adjusted, but must be documented.
 
@@ -890,37 +909,9 @@ The exact config mechanism does not need to be implemented fully now, but the de
 
 ---
 
-## 17. Feature Migration Process
+## 17. Feature Migration
 
-Legacy feature migration must be handled separately from the foundational rebuild.
-
-### Required Process
-
-Once the user provides the file/functionality list, the implementation agent must:
-
-1. Inventory existing features.
-2. Group features by domain.
-3. Identify which features are required for cutover.
-4. Identify which features can be deferred.
-5. Identify dependencies on App Engine-specific APIs or obsolete libraries.
-6. Propose replacement approaches.
-7. Create a migration roadmap.
-8. Create issues/tasks for implementation.
-
-### Migration Input Format
-
-The user will provide:
-
-```text
-<file path or code reference> — <short summary of functionality>
-```
-
-### Acceptance Criteria
-
-* Legacy features are not blindly copied into the new app.
-* Each migrated feature has tests.
-* App Engine-specific dependencies are removed or replaced.
-* Feature migration tasks are tracked separately from foundation tasks.
+Feature-by-feature migration is tracked in the umbrella issue #21. Each migrated feature lands as its own PR with tests; legacy code is not copied verbatim.
 
 ---
 
@@ -961,33 +952,13 @@ Define:
 * Service account.
 * Ingress/authentication model.
 
-### 18.4 Cron Migration RFC
-
-Based on provided `cron.yaml`, define how existing scheduled tasks should be recreated outside App Engine.
-
-### 18.5 Multi-Bot Config RFC
+### 18.4 Multi-Bot Config RFC
 
 Define how the project should support multiple bots later without overbuilding it immediately.
 
 ---
 
 ## 19. Suggested Implementation Phases
-
-## Phase 0 — Discovery and Repo Cleanup Plan
-
-* Inspect existing repository.
-* Identify App Engine-specific files and deployment config.
-* Identify legacy features and cron jobs once provided.
-* Propose deletion/replacement plan.
-* Confirm target repo structure.
-
-Deliverables:
-
-* Migration inventory.
-* File removal/replacement plan.
-* Initial task breakdown.
-
----
 
 ## Phase 1 — Project Skeleton
 
@@ -1114,20 +1085,10 @@ Acceptance:
 
 ---
 
-## Phase 8 — Cron and Legacy Feature Migration
+## Phase 8 — Feature Migration
 
-* Inspect provided cron configuration.
-* Propose Cloud Scheduler / Cloud Run replacement.
-* Inspect provided legacy feature list.
-* Create prioritized migration tasks.
-* Migrate cutover-critical features first.
-* Add tests per migrated feature.
-
-Acceptance:
-
-* App Engine cron dependency is removed.
-* Required legacy features are migrated or explicitly deferred.
-* Each migrated feature has test coverage.
+* Migrate legacy features one at a time via the umbrella issue #21.
+* Each migrated feature has its own PR with tests.
 
 ---
 
@@ -1135,21 +1096,19 @@ Acceptance:
 
 The implementation agent must follow these rules:
 
-1. Do not refactor the old App Engine app incrementally. Rebuild cleanly.
-2. Do not blindly copy messy legacy code.
-3. Preserve useful business logic only after understanding it.
-4. Keep the first deployment minimal.
-5. Prefer simple architecture over over-engineering.
-6. Keep boundaries clean: API, routing, features, persistence, storage, config.
-7. Add tests for every meaningful behavior implemented.
-8. Mock external APIs in unit tests.
-9. Do not commit secrets.
-10. Use `uv`, `ruff`, and `pytest`.
-11. Use Terraform for infrastructure.
-12. Use GitHub Actions with GCP OIDC.
-13. Document known unknowns instead of guessing silently.
-14. Create small, reviewable tasks/issues.
-15. Make the system extensible for future multi-bot support.
+1. Do not blindly copy messy legacy code; preserve useful business logic only after understanding it.
+2. Keep the first deployment of any new feature minimal.
+3. Prefer simple architecture over over-engineering.
+4. Keep boundaries clean: API, routing, features, persistence, storage, config.
+5. Add tests for every meaningful behavior implemented.
+6. Mock external APIs in unit tests.
+7. Do not commit secrets.
+8. Use `uv`, `ruff`, and `pytest`.
+9. Use Terraform for infrastructure.
+10. Use GitHub Actions with GCP OIDC.
+11. Document known unknowns instead of guessing silently.
+12. Create small, reviewable tasks/issues.
+13. Make the system extensible for future multi-bot support.
 
 ---
 
@@ -1157,7 +1116,6 @@ The implementation agent must follow these rules:
 
 The foundational rebuild is done when:
 
-* The old App Engine app is removed from active deployment.
 * A Python 3.12 FastAPI service runs on Cloud Run.
 * Telegram webhook points to the new `/webhook` endpoint.
 * Telegram secret header validation works.
@@ -1177,48 +1135,15 @@ The foundational rebuild is done when:
 
 ## 22. Open Inputs Required From User
 
-The following inputs are expected later:
+These foundational inputs are captured in code or Terraform variables and no longer block work:
 
-1. Existing repository structure or file list.
-2. Existing feature list in the agreed format.
-3. Existing `cron.yaml` or equivalent scheduled job config.
-4. GCP project ID.
-5. BigQuery dataset name.
-6. Existing BigQuery conventions, if any.
-7. Telegram bot token secret name or preferred naming.
-8. Telegram webhook secret value/secret name.
-9. QA Telegram user IDs.
-10. Preferred service name for Cloud Run.
-11. Preferred Artifact Registry repository name.
-12. Any naming conventions for Terraform resources.
+* GCP project ID (`something-bot-338300`).
+* BigQuery dataset name (`something_bot`).
+* Telegram bot token / QA users / webhook secret (Secret Manager names in `var.bots`).
+* Service / repo / WIF naming conventions (Terraform variables).
 
 ---
 
-## 23. Recommended First Issues
+## 23. Final Notes
 
-The next agent should likely break this specification into issues similar to:
-
-1. Create Python 3.12 FastAPI project skeleton with `uv`, `ruff`, and `pytest`.
-2. Add Dockerfile for Cloud Run deployment.
-3. Implement Telegram webhook endpoint with secret header validation.
-4. Implement Telegram update parser and typed update classification.
-5. Implement routing/dispatcher design proposal.
-6. Implement QA allowlist and Hello World/parrot text handler.
-7. Implement `/start` and `/help` command handlers.
-8. Draft BigQuery schema RFC.
-9. Implement BigQuery persistence service.
-10. Draft async file-processing RFC.
-11. Implement Telegram file download and GCS storage.
-12. Add Terraform foundation for Cloud Run, GCS, IAM, Secret Manager, and Artifact Registry.
-13. Add GitHub Actions CI workflow.
-14. Add GitHub Actions deploy workflow with GCP OIDC.
-15. Inspect legacy feature list and create migration roadmap.
-16. Inspect cron config and create Cloud Scheduler migration proposal.
-
----
-
-## 24. Final Notes
-
-The first version should be boring, reliable, and extensible. The goal is not to recreate every legacy feature immediately (most of them would not be moved either way). The goal is to create a clean foundation that can safely receive Telegram updates, store them, respond to QA users, handle files, and support future feature migration without collapsing into another pile of procedural glue.
-
-In other words: build the floor before installing chandeliers. Software teams keep forgetting this, presumably because chandeliers look nicer in sprint demos.
+This bot should stay boring, reliable, and extensible. Not every legacy feature gets rebuilt — only the ones still worth running. The floor is in place; new chandeliers go in via small, reviewable PRs that don't collapse it back into procedural glue.

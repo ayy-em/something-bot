@@ -45,6 +45,7 @@ from something_really_bot.persistence import (
 )
 from something_really_bot.persistence.bigquery import get_persistence_service
 from something_really_bot.routing.dispatcher import Dispatcher
+from something_really_bot.routing.help_registry import HelpRegistry
 from something_really_bot.routing.types import BotContext, HandlerResult
 from something_really_bot.services.jobs import JobRegistry, UnknownJobError
 from something_really_bot.services.openai_client import get_openai_client
@@ -70,10 +71,14 @@ _logger = get_logger(__name__)
 
 
 def build_default_dispatcher() -> Dispatcher:
-    """Construct the production dispatcher with all enabled handlers."""
+    """Construct the production dispatcher with all enabled handlers.
+
+    Registration order matters: it's both the dispatch precedence and
+    the order the auto-generated ``/help`` (#27) lists features in.
+    """
     dispatcher = Dispatcher()
     dispatcher.register(StartCommandHandler())
-    dispatcher.register(HelpCommandHandler())
+    dispatcher.register(HelpCommandHandler(HelpRegistry(lambda: dispatcher.handlers)))
     dispatcher.register(FileStorageHandler())
     dispatcher.register(HelloWorldHandler())  # gated by settings.hello_world_mode
     dispatcher.register(OpenAIFallbackHandler())

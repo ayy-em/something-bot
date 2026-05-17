@@ -13,6 +13,7 @@ dependencies = [
     "google-cloud-storage>=3.10,<4",
     "httpx>=0.28,<0.29",
     "openai>=2.37,<3",
+    "psycopg[binary]>=3.2,<4",
     "pydantic-settings>=2.14,<3",
     "uvicorn[standard]>=0.47,<0.48",
 ]

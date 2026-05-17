@@ -46,6 +46,16 @@ class Dispatcher:
         """Append a handler to the match-order list."""
         self._handlers.append(handler)
 
+    @property
+    def handlers(self) -> tuple[Handler, ...]:
+        """Snapshot of the registered handlers in match order.
+
+        Read-only; used by :class:`HelpRegistry` (#27) to enumerate
+        features at ``/help`` time. Mutating the dispatcher after
+        snapshotting won't be reflected in the returned tuple.
+        """
+        return tuple(self._handlers)
+
     def set_fallback(self, handler: Handler) -> None:
         """Set the catch-all handler used when no registered handler matches."""
         self._fallback = handler

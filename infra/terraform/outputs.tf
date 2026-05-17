@@ -13,6 +13,11 @@ output "deployer_service_account_email" {
   value       = google_service_account.deployer.email
 }
 
+output "planner_service_account_email" {
+  description = "Read-only service account assumed by GitHub Actions for `terraform plan` (#29). Goes into the workflow as `service_account` for the `google-github-actions/auth` step on the plan job."
+  value       = google_service_account.planner.email
+}
+
 output "workload_identity_provider" {
   description = "Fully-qualified WIF provider resource name. Goes into the workflow as `workload_identity_provider` for the `google-github-actions/auth` step."
   value       = google_iam_workload_identity_pool_provider.github.name
@@ -26,6 +31,11 @@ output "artifact_registry_repository" {
 output "telegram_files_bucket" {
   description = "GCS bucket Cloud Run writes Telegram-uploaded files to."
   value       = google_storage_bucket.telegram_files.name
+}
+
+output "openai_context_bucket" {
+  description = "GCS bucket holding the persistent OpenAI context .md files (#26). scripts/context-sync.sh syncs to/from this name."
+  value       = google_storage_bucket.openai_context.name
 }
 
 output "webhook_secret_names" {

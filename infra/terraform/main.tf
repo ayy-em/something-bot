@@ -22,6 +22,15 @@ locals {
     "roles/run.admin",
   ]
 
+  # Read-only roles for the planner SA used by `terraform plan` in CI
+  # (#29). The planner must be able to *read* every resource type the
+  # plan touches (IAM, secrets, Cloud Run, etc.) but never mutate them.
+  planner_project_roles = [
+    "roles/viewer",
+    "roles/iam.securityReviewer",
+    "roles/secretmanager.viewer",
+  ]
+
   webhook_secret_ids = {
     for key, _ in var.bots : key => "telegram-webhook-secret-${key}"
   }
@@ -69,6 +78,25 @@ resource "google_storage_bucket" "telegram_files" {
 }
 
 # --------------------------------------------------------------------------- #
+# GCS bucket for the persistent OpenAI context (#26)
+# --------------------------------------------------------------------------- #
+
+resource "google_storage_bucket" "openai_context" {
+  project                     = var.project_id
+  name                        = var.openai_context_bucket_name
+  location                    = var.region
+  uniform_bucket_level_access = true
+  force_destroy               = false
+  public_access_prevention    = "enforced"
+
+  versioning {
+    enabled = true
+  }
+
+  depends_on = [google_project_service.enabled]
+}
+
+# --------------------------------------------------------------------------- #
 # Service accounts
 # --------------------------------------------------------------------------- #
 
@@ -86,6 +114,15 @@ resource "google_service_account" "deployer" {
   account_id   = "something-bot-deployer-sa"
   display_name = "Something Dashboard bot — GitHub Actions deployer"
   description  = "Assumed by GitHub Actions via Workload Identity Federation to push images and deploy Cloud Run."
+
+  depends_on = [google_project_service.enabled]
+}
+
+resource "google_service_account" "planner" {
+  project      = var.project_id
+  account_id   = "something-bot-planner-sa"
+  display_name = "Something Dashboard bot — GitHub Actions Terraform planner"
+  description  = "Assumed by GitHub Actions via WIF to run read-only `terraform plan` (#29). Strictly read-only — see locals.planner_project_roles."
 
   depends_on = [google_project_service.enabled]
 }
@@ -137,6 +174,20 @@ resource "google_project_iam_member" "deployer" {
   member  = "serviceAccount:${google_service_account.deployer.email}"
 }
 
+resource "google_service_account_iam_member" "planner_wif" {
+  service_account_id = google_service_account.planner.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.repository/${var.github_repo}"
+}
+
+resource "google_project_iam_member" "planner" {
+  for_each = toset(local.planner_project_roles)
+
+  project = var.project_id
+  role    = each.value
+  member  = "serviceAccount:${google_service_account.planner.email}"
+}
+
 # --------------------------------------------------------------------------- #
 # Secret Manager — existing secrets referenced as data sources
 # --------------------------------------------------------------------------- #
@@ -158,6 +209,16 @@ data "google_secret_manager_secret" "telegram_qa_users" {
 data "google_secret_manager_secret" "openai_api_key" {
   project   = var.project_id
   secret_id = var.openai_api_key_secret_name
+}
+
+data "google_secret_manager_secret" "postgres_dsn" {
+  project   = var.project_id
+  secret_id = var.postgres_dsn_secret_name
+}
+
+data "google_secret_manager_secret" "postgres_instance" {
+  project   = var.project_id
+  secret_id = var.postgres_instance_secret_name
 }
 
 # --------------------------------------------------------------------------- #
@@ -215,6 +276,20 @@ resource "google_secret_manager_secret_iam_member" "cloudrun_openai" {
   member    = "serviceAccount:${google_service_account.cloudrun.email}"
 }
 
+resource "google_secret_manager_secret_iam_member" "cloudrun_postgres_dsn" {
+  project   = var.project_id
+  secret_id = data.google_secret_manager_secret.postgres_dsn.secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.cloudrun.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "cloudrun_postgres_instance" {
+  project   = var.project_id
+  secret_id = data.google_secret_manager_secret.postgres_instance.secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.cloudrun.email}"
+}
+
 # --------------------------------------------------------------------------- #
 # Secret access for the deployer service account
 #
@@ -242,6 +317,17 @@ resource "google_secret_manager_secret_iam_member" "deployer_webhook_secret" {
   member    = "serviceAccount:${google_service_account.deployer.email}"
 }
 
+# The deploy workflow reads POSTGRES_INSTANCE on the runner so it can pass
+# the Cloud SQL connection name to `gcloud run deploy --add-cloudsql-instances`.
+# Bind the deployer SA explicitly rather than the runtime SA's binding above
+# so the two identities stay independently revocable.
+resource "google_secret_manager_secret_iam_member" "deployer_postgres_instance" {
+  project   = var.project_id
+  secret_id = data.google_secret_manager_secret.postgres_instance.secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.deployer.email}"
+}
+
 # --------------------------------------------------------------------------- #
 # GCS bucket access for the Cloud Run runtime service account
 # --------------------------------------------------------------------------- #
@@ -249,6 +335,12 @@ resource "google_secret_manager_secret_iam_member" "deployer_webhook_secret" {
 resource "google_storage_bucket_iam_member" "cloudrun_files" {
   bucket = google_storage_bucket.telegram_files.name
   role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.cloudrun.email}"
+}
+
+resource "google_storage_bucket_iam_member" "cloudrun_openai_context" {
+  bucket = google_storage_bucket.openai_context.name
+  role   = "roles/storage.objectViewer"
   member = "serviceAccount:${google_service_account.cloudrun.email}"
 }
 
@@ -316,6 +408,8 @@ resource "google_cloud_run_v2_service" "main" {
     google_secret_manager_secret_iam_member.cloudrun_qa_users,
     google_secret_manager_secret_iam_member.cloudrun_webhook_secret,
     google_secret_manager_secret_iam_member.cloudrun_openai,
+    google_secret_manager_secret_iam_member.cloudrun_postgres_dsn,
+    google_secret_manager_secret_iam_member.cloudrun_postgres_instance,
     google_storage_bucket_iam_member.cloudrun_files,
   ]
 }
