@@ -89,3 +89,9 @@ variable "openai_api_key_secret_name" {
   type        = string
   default     = "OPENAI_API_KEY"
 }
+
+variable "something_group_chat_id_secret_name" {
+  description = "Existing Secret Manager secret holding the target Telegram chat_id for the FinCo daily stats digest (#25). Upper-snake-cased to match the env var name injected into Cloud Run."
+  type        = string
+  default     = "SOMETHING_GROUP_CHAT_ID"
+}

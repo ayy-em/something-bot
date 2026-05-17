@@ -6,14 +6,19 @@
 # `docs/architecture.md#scheduled-jobs`.
 
 locals {
-  # Per-job configuration. Issues #24 (tiktok-reminder) and #25
-  # (finco-daily-stats) each add one entry here when they land.
+  # Per-job configuration.
   scheduled_jobs = {
     tiktok-reminder = {
       schedule    = "0 11 * * 5" # Friday 11:00
       timezone    = "Europe/Amsterdam"
       target_path = "/jobs/tiktok-reminder"
       description = "Friday TikTok reminder for Irindica (#24)."
+    }
+    finco-daily-stats = {
+      schedule    = "30 10 * * *" # Daily 10:30
+      timezone    = "Europe/Amsterdam"
+      target_path = "/jobs/finco-daily-stats"
+      description = "Daily multi-site website stats digest (#25)."
     }
   }
 }
