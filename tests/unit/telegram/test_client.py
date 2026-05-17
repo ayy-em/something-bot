@@ -69,6 +69,20 @@ async def test_send_message_does_not_log_token(caplog: pytest.LogCaptureFixture)
         assert "super-secret-token" not in record.getMessage()
 
 
+async def test_send_message_includes_parse_mode_when_set() -> None:
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(200, json={"ok": True, "result": {"message_id": 1}})
+
+    client = _client_with_handler(handler)
+
+    await client.send_message(chat_id=1, text="<b>hi</b>", parse_mode="HTML")
+
+    assert captured["body"]["parse_mode"] == "HTML"
+
+
 async def test_send_message_includes_reply_parameters() -> None:
     captured: dict = {}
 

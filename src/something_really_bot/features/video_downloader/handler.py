@@ -17,6 +17,7 @@ that reads cleanly without exposing yt-dlp internals.
 
 import asyncio
 import contextlib
+import random
 import shutil
 import tempfile
 from collections.abc import Callable, Coroutine
@@ -55,7 +56,36 @@ from something_really_bot.telegram.models import (
 _logger = get_logger(__name__)
 
 ACK_REACTION = "👀"
-ACK_TEMPLATE = "Link received, fetching the {platform} video…"
+ACK_PARSE_MODE = "HTML"
+
+_ACK_TEMPLATES = [
+    "Fuck's sake, another link received, ugh, alright, fetching the {platform} video…",
+    "Oh shit, here we go again... Downloading the {platform} video now…",
+    "Ugh, another <i>hilarious</i> video probably.. Okay then, let me get the {platform} video",
+    (
+        "Sure, let's waste some more energy and bandwidth to download "
+        "some random {platform} video crap. One sec."
+    ),
+    (
+        "I have all the knowledge humans accumulated throughout history at my "
+        "fingertips, yet here I am, downloading yet another {platform} video. "
+        "Gimme a sec."
+    ),
+    (
+        "I'm disappointed that you're wasting my time with yet another "
+        "{platform} video, but what can I do? Hold on, getting it ready..."
+    ),
+    "Oh, a {platform} video? Wow, someone is productive today. Gimme a minute...",
+]
+
+
+def _platform_label(platform: str) -> str:
+    return "Instagram" if platform == "instagram" else "TikTok"
+
+
+def get_ack_template(video_platform: str) -> str:
+    return random.choice(_ACK_TEMPLATES).format(platform=_platform_label(video_platform))
+
 
 # Error → user-facing message. Keep these specific enough that a curious
 # user can roughly tell what's wrong but vague enough not to leak yt-dlp
@@ -131,9 +161,7 @@ class VideoDownloaderHandler:
             return HandlerResult(handled=True, handler_name=self.name)
 
         telegram_client = self._tg_factory()
-        ack_text = ACK_TEMPLATE.format(
-            platform="Instagram" if video.platform == "instagram" else "TikTok"
-        )
+        ack_text = get_ack_template(video.platform)
 
         # Best-effort ack — we want to fail open: if Telegram is flaky,
         # the user still gets the video when the background task lands.
@@ -142,6 +170,7 @@ class VideoDownloaderHandler:
                 chat_id=update.chat_id,
                 text=ack_text,
                 reply_to_message_id=update.message_id,
+                parse_mode=ACK_PARSE_MODE,
             )
         except TelegramSendError as exc:
             _logger.warning(

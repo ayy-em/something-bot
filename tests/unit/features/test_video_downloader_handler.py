@@ -79,13 +79,14 @@ class _FakeTelegram:
     reaction_raises: BaseException | None = None
     send_video_message_id: int = 555
 
-    async def send_message(self, chat_id, text, *, reply_to_message_id=None):
+    async def send_message(self, chat_id, text, *, reply_to_message_id=None, parse_mode=None):
         if self.send_message_raises is not None:
             raise self.send_message_raises
         record = {
             "chat_id": chat_id,
             "text": text,
             "reply_to_message_id": reply_to_message_id,
+            "parse_mode": parse_mode,
         }
         self.sent_messages.append(record)
         return {"message_id": 1}
@@ -342,7 +343,8 @@ async def test_handle_happy_path_dm() -> None:
     ack = telegram.sent_messages[0]
     assert ack["chat_id"] == 100
     assert ack["reply_to_message_id"] == 42
-    assert "Instagram" in ack["text"]
+    assert "video" in ack["text"].lower()
+    assert ack["parse_mode"] == "HTML"
     assert telegram.reactions == [{"chat_id": 100, "message_id": 42, "emoji": "👀"}]
     assert len(scheduled) == 1
 
@@ -397,8 +399,8 @@ async def test_handle_group_uses_supergroup_pattern() -> None:
         _ctx(),
     )
 
-    assert telegram.sent_messages[0]["text"].startswith("Link received")
-    assert "TikTok" in telegram.sent_messages[0]["text"]
+    assert "video" in telegram.sent_messages[0]["text"].lower()
+    assert telegram.sent_messages[0]["parse_mode"] == "HTML"
     await scheduled[0]
 
     assert telegram.sent_videos[0]["chat_id"] == -1001

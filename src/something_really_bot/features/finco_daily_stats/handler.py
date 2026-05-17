@@ -92,7 +92,7 @@ class FinCoDailyStatsJob:
         return _SitePart(site=site, ga4=ga4_value)
 
     def _compose_message(self, report_date: date, parts: tuple[_SitePart, ...]) -> str:
-        lines = [f"\U0001f4ca Daily Website Stats: {report_date.isoformat()}"]
+        lines = [f"\U0001f4ca Daily Website Stats: **{report_date.isoformat()}**"]
         body_sections: list[str] = []
         for part in parts:
             section = self._compose_site_section(part)
@@ -111,13 +111,13 @@ class FinCoDailyStatsJob:
 
         ga4 = part.ga4
         site_lines = [
-            f"  Visitors: {ga4.total_users:,} ({ga4.new_users:,} new), "
+            f"  :eyes: Visitors: {ga4.total_users:,} ({ga4.new_users:,} new), "
             f"{ga4.total_users_7d:,} last 7 days"
         ]
         if ga4.top_pages:
-            site_lines.append("  Top pages:")
+            site_lines.append("  :top: Top pages:")
             for idx, page in enumerate(ga4.top_pages, start=1):
-                display_path = page.page_path.removeprefix("/") or "/"
+                display_path = page.page_path.removeprefix("/") or "Homepage"
                 site_lines.append(f"    {idx}. {display_path} — {page.views:,}")
 
         header = f"{site.label} ({site.domain})"

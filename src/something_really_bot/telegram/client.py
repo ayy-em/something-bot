@@ -57,6 +57,7 @@ class TelegramClient:
         text: str,
         *,
         reply_to_message_id: int | None = None,
+        parse_mode: str | None = None,
     ) -> dict[str, Any]:
         """POST ``sendMessage`` and return the decoded ``result`` field.
 
@@ -65,6 +66,8 @@ class TelegramClient:
         """
         url = f"{self._base_url}/bot{self._token.get_secret_value()}/sendMessage"
         payload: dict[str, Any] = {"chat_id": chat_id, "text": text}
+        if parse_mode is not None:
+            payload["parse_mode"] = parse_mode
         if reply_to_message_id is not None:
             payload["reply_parameters"] = {
                 "message_id": reply_to_message_id,
