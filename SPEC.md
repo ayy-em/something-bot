@@ -527,6 +527,18 @@ or equivalent.
 
 Cron-style work runs via Cloud Scheduler hitting `POST /jobs/{name}` on Cloud Run (#22). Each job is a `JobHandler` registered in `main.py`; the scheduler is defined in `infra/terraform/scheduler.tf` (one entry per job). OIDC verification on the route ensures only the scheduler SA can invoke it.
 
+### 7.1 FinCo daily stats (#25)
+
+Single daily Telegram digest reporting per-site website performance across all configured sites. Schedule: 10:30 Europe/Amsterdam. Recipient: the chat id in the `SOMETHING_GROUP_CHAT_ID` Secret Manager secret.
+
+Data sources:
+
+* **Google Analytics 4 Data API** — `totalUsers`, `newUsers`, and the top-5 pages by `screenPageViews`. The Cloud Run runtime SA reads each property; Viewer access is granted via the Admin API since GA4's UI rejects service-account emails. See `scripts/grant_ga4_viewer.py`.
+
+Google Search Console is **out of scope** for #25. The runtime SA cannot be granted GSC access (Google's GSC UI also rejects non-Google-account emails, and GSC has no Admin API for user management), so adding GSC requires a personal-OAuth refresh-token flow against a real Google user with property access. That work is tracked as a separate backlog issue.
+
+Per-site degradation: if GA4 fails for one site, that site's section is omitted; if every site fails, the digest still sends "No data today." so the operator notices the failure mode rather than silent absence.
+
 ---
 
 ## 8. Infrastructure as Code

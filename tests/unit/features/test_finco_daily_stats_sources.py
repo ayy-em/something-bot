@@ -1,0 +1,100 @@
+"""Unit tests for the GA4 source wrapper (#25).
+
+The wrapper runs the synchronous Google SDK in a thread; tests inject a
+fake client to avoid hitting the network and the SDK. GSC integration
+is intentionally out of scope here — see the backlog issue for the
+personal-OAuth-based reader.
+"""
+
+from dataclasses import dataclass, field
+from datetime import date
+from typing import Any
+
+import pytest
+
+from something_really_bot.features.finco_daily_stats.source.google_analytics import (
+    GoogleAnalyticsError,
+    fetch_site_metrics,
+)
+
+
+@dataclass
+class _MetricValue:
+    value: str
+
+
+@dataclass
+class _DimensionValue:
+    value: str
+
+
+@dataclass
+class _Row:
+    metric_values: list[_MetricValue] = field(default_factory=list)
+    dimension_values: list[_DimensionValue] = field(default_factory=list)
+
+
+@dataclass
+class _Response:
+    rows: list[_Row] = field(default_factory=list)
+
+
+class _FakeGA4Client:
+    """Replays a configured sequence of responses to ``run_report``."""
+
+    def __init__(self, responses: list[_Response]) -> None:
+        self._responses = list(responses)
+        self.calls: list[Any] = []
+
+    def run_report(self, request):  # type: ignore[no-untyped-def]
+        self.calls.append(request)
+        return self._responses.pop(0)
+
+
+async def test_fetch_site_metrics_parses_two_run_report_responses() -> None:
+    totals = _Response(rows=[_Row(metric_values=[_MetricValue("1234"), _MetricValue("412")])])
+    pages = _Response(
+        rows=[
+            _Row(
+                metric_values=[_MetricValue("312")],
+                dimension_values=[_DimensionValue("/pricing")],
+            ),
+            _Row(
+                metric_values=[_MetricValue("220")],
+                dimension_values=[_DimensionValue("/about")],
+            ),
+        ]
+    )
+    client = _FakeGA4Client(responses=[totals, pages])
+
+    result = await fetch_site_metrics(
+        "280078425", date(2026, 5, 16), date(2026, 5, 16), client=client
+    )
+
+    assert result.total_users == 1234
+    assert result.new_users == 412
+    assert [p.page_path for p in result.top_pages] == ["/pricing", "/about"]
+    assert [p.views for p in result.top_pages] == [312, 220]
+    assert len(client.calls) == 2
+
+
+async def test_fetch_site_metrics_handles_empty_responses() -> None:
+    client = _FakeGA4Client(responses=[_Response(rows=[]), _Response(rows=[])])
+
+    result = await fetch_site_metrics(
+        "280078425", date(2026, 5, 16), date(2026, 5, 16), client=client
+    )
+
+    assert result.total_users == 0
+    assert result.new_users == 0
+    assert result.top_pages == ()
+
+
+async def test_fetch_site_metrics_funnels_client_failures_to_typed_error() -> None:
+    class _Boom:
+        def run_report(self, _r):  # type: ignore[no-untyped-def]
+            raise RuntimeError("transport down")
+
+    with pytest.raises(GoogleAnalyticsError) as excinfo:
+        await fetch_site_metrics("280078425", date(2026, 5, 16), date(2026, 5, 16), client=_Boom())
+    assert "transport down" in str(excinfo.value)

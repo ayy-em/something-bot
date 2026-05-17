@@ -221,6 +221,11 @@ data "google_secret_manager_secret" "postgres_instance" {
   secret_id = var.postgres_instance_secret_name
 }
 
+data "google_secret_manager_secret" "something_group_chat_id" {
+  project   = var.project_id
+  secret_id = var.something_group_chat_id_secret_name
+}
+
 # --------------------------------------------------------------------------- #
 # Secret Manager — webhook secret placeholder per bot (value injected out-of-band)
 # --------------------------------------------------------------------------- #
@@ -286,6 +291,13 @@ resource "google_secret_manager_secret_iam_member" "cloudrun_postgres_dsn" {
 resource "google_secret_manager_secret_iam_member" "cloudrun_postgres_instance" {
   project   = var.project_id
   secret_id = data.google_secret_manager_secret.postgres_instance.secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.cloudrun.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "cloudrun_something_group_chat_id" {
+  project   = var.project_id
+  secret_id = data.google_secret_manager_secret.something_group_chat_id.secret_id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.cloudrun.email}"
 }
@@ -410,6 +422,7 @@ resource "google_cloud_run_v2_service" "main" {
     google_secret_manager_secret_iam_member.cloudrun_openai,
     google_secret_manager_secret_iam_member.cloudrun_postgres_dsn,
     google_secret_manager_secret_iam_member.cloudrun_postgres_instance,
+    google_secret_manager_secret_iam_member.cloudrun_something_group_chat_id,
     google_storage_bucket_iam_member.cloudrun_files,
   ]
 }

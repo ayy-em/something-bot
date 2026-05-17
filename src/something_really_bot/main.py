@@ -30,6 +30,7 @@ from something_really_bot.features.commands.handler import (
 )
 from something_really_bot.features.example.handler import PingHandler
 from something_really_bot.features.file_storage.handler import FileStorageHandler
+from something_really_bot.features.finco_daily_stats.handler import FinCoDailyStatsJob
 from something_really_bot.features.hello_world.handler import HelloWorldHandler
 from something_really_bot.features.openai_fallback.handler import OpenAIFallbackHandler
 from something_really_bot.features.tiktok_reminder.handler import TikTokReminderJob
@@ -95,6 +96,7 @@ def build_default_job_registry() -> JobRegistry:
     """
     registry = JobRegistry()
     registry.register(TikTokReminderJob())
+    registry.register(FinCoDailyStatsJob())
     return registry
 
 

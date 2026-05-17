@@ -146,6 +146,16 @@ class Settings(BaseSettings):
         ),
     )
 
+    # --- FinCo daily stats (#25) ---
+    something_group_chat_id: int | None = Field(
+        default=None,
+        description=(
+            "Target Telegram chat for the FinCo daily multi-site stats digest (#25). "
+            "Sourced from the SOMETHING_GROUP_CHAT_ID secret. When unset, the "
+            "finco-daily-stats job logs and skips."
+        ),
+    )
+
     @field_validator("telegram_qa_user_ids", mode="before")
     @classmethod
     def _parse_qa_users(cls, raw: Any) -> Any:
