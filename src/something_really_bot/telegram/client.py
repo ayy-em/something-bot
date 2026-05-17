@@ -157,6 +157,62 @@ class TelegramClient:
 
         return body.get("result", {})
 
+    async def send_document(
+        self,
+        chat_id: int,
+        document_bytes: bytes,
+        *,
+        filename: str,
+        mime_type: str = "application/octet-stream",
+        caption: str | None = None,
+        reply_to_message_id: int | None = None,
+    ) -> dict[str, Any]:
+        """POST ``sendDocument`` with raw bytes as multipart upload.
+
+        Used by features that need Telegram to deliver a file without
+        re-compressing it (sticker-ready PNGs, raw audio attachments).
+
+        Raises:
+            TelegramSendError: HTTP error or ``ok=false`` in the response.
+        """
+        url = f"{self._base_url}/bot{self._token.get_secret_value()}/sendDocument"
+        data: dict[str, Any] = {"chat_id": str(chat_id)}
+        if caption is not None:
+            data["caption"] = caption
+        if reply_to_message_id is not None:
+            data["reply_parameters"] = json.dumps(
+                {
+                    "message_id": reply_to_message_id,
+                    "allow_sending_without_reply": True,
+                }
+            )
+
+        files = {"document": (filename, document_bytes, mime_type)}
+        response = await self._request(
+            "POST",
+            url,
+            data=data,
+            files=files,
+            timeout=_UPLOAD_TIMEOUT,
+        )
+
+        if response.status_code >= 400:
+            _logger.warning(
+                "telegram_send_document_http_error",
+                extra={"status": response.status_code, "chat_id": chat_id},
+            )
+            raise TelegramSendError(f"sendDocument HTTP {response.status_code}")
+
+        body = response.json()
+        if not body.get("ok"):
+            _logger.warning(
+                "telegram_send_document_not_ok",
+                extra={"chat_id": chat_id, "description": body.get("description")},
+            )
+            raise TelegramSendError(f"sendDocument not ok: {body.get('description')!r}")
+
+        return body.get("result", {})
+
     async def set_message_reaction(
         self,
         chat_id: int,

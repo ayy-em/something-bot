@@ -713,6 +713,33 @@ the error matrix and lifecycle details.
 
 ---
 
+## 6.15 /make-sticker — Image to Sticker-Ready PNG (#44)
+
+Two-turn command, **private chats only**, that converts an image into a
+Telegram-sticker-shaped PNG.
+
+* `/make-sticker` — sets a pending action expecting an `image`, prompts
+  the user to send one.
+* Next photo from the same user within 10 minutes — handler downloads
+  it, stores the original under `sticker_requests/`, runs the Pillow
+  transform (resize to ≤ 512 px on the longer edge, convert to RGBA,
+  PNG encode), stores the output under `sticker_outputs/`, and replies
+  with `sendDocument` (not `sendPhoto`, to bypass Telegram's
+  re-compression).
+
+No automatic background removal in v1 — existing alpha is preserved,
+opaque sources stay opaque. rembg / OpenAI image-edit is a backlog
+candidate.
+
+`MakeStickerHandler` registers **before** `FileStorageHandler` so that
+a photo with a live pending row goes to the sticker pipeline rather
+than the generic file-to-GCS dump.
+
+See `src/something_really_bot/features/make_sticker/README.md` for the
+transform internals, GCS layout, and error matrix.
+
+---
+
 ## 7. Scheduled Jobs
 
 Cron-style work runs via Cloud Scheduler hitting `POST /jobs/{name}` on Cloud Run (#22). Each job is a `JobHandler` registered in `main.py`; the scheduler is defined in `infra/terraform/scheduler.tf` (one entry per job). OIDC verification on the route ensures only the scheduler SA can invoke it.
