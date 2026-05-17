@@ -77,6 +77,15 @@ class Settings(BaseSettings):
         default="gpt-4o-mini",
         description="OpenAI chat model used by the fallback handler.",
     )
+    openai_context_bucket: str | None = Field(
+        default="something-bot-openai-context",
+        description=(
+            "GCS bucket holding the persistent .md context files prepended to "
+            "every OpenAI chat completion (#26). When unset/empty, no context "
+            "is loaded and the fallback handler keeps the #23 no-context "
+            "behaviour."
+        ),
+    )
 
     # --- Feature flags ---
     hello_world_mode: bool = Field(
@@ -103,6 +112,37 @@ class Settings(BaseSettings):
         description=(
             "OIDC token issuer for incoming /jobs/<name> calls. Required for the "
             "scheduled-jobs endpoint to accept requests; if unset, /jobs/* always 401."
+        ),
+    )
+
+    # --- Shared Postgres (#31) ---
+    postgres_dsn: SecretStr | None = Field(
+        default=None,
+        description=(
+            "Connection string for the shared Cloud SQL Postgres instance hosting "
+            "the something-bot schema (#31). When unset, the Postgres wrapper "
+            "is not built and any call site that depends on it gracefully "
+            "no-ops. Format: postgres://<user>:<pass>@<host>:5432/<db>?sslmode=require "
+            "(or the Cloud SQL Auth Proxy unix socket form: "
+            "postgres://<user>:<pass>@/<db>?host=/cloudsql/<project>:<region>:<instance>)."
+        ),
+    )
+    postgres_schema: str = Field(
+        default="something_bot",
+        description=(
+            "Postgres schema the bot writes to inside the shared DB (#31). Created "
+            "on first connection if missing (CREATE SCHEMA IF NOT EXISTS)."
+        ),
+    )
+    postgres_instance: SecretStr | None = Field(
+        default=None,
+        description=(
+            "Cloud SQL instance connection name (project:region:instance) for the "
+            "shared Postgres instance. When set, the Postgres wrapper routes psycopg "
+            "through the Cloud SQL Auth Proxy socket at /cloudsql/<value>/ by "
+            "overriding the host kwarg, regardless of what host:port the DSN "
+            "specifies. Unset locally so psycopg uses the DSN's host:port verbatim. "
+            "Treated as a secret so the value never lands in logs."
         ),
     )
 

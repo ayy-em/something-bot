@@ -14,26 +14,12 @@ from something_really_bot.features.finco_daily_stats.source.google_analytics imp
     SiteMetrics,
     TopPage,
 )
-from something_really_bot.features.finco_daily_stats.source.google_search_console import (
-    GoogleSearchConsoleError,
-    SearchConsoleMetrics,
-)
 from something_really_bot.routing.types import BotContext
 
 GROUP_CHAT_ID = -1001234567890
 
-SITE_A = SiteConfig(
-    label="A",
-    domain="a.example",
-    ga4_property_id="111",
-    gsc_site_url="sc-domain:a.example",
-)
-SITE_B = SiteConfig(
-    label="B",
-    domain="b.example",
-    ga4_property_id="222",
-    gsc_site_url="sc-domain:b.example",
-)
+SITE_A = SiteConfig(label="A", domain="a.example", ga4_property_id="111")
+SITE_B = SiteConfig(label="B", domain="b.example", ga4_property_id="222")
 TWO_SITES: tuple[SiteConfig, ...] = (SITE_A, SITE_B)
 
 
@@ -101,41 +87,27 @@ def _ga4_fetcher_for(values: dict[str, SiteMetrics | BaseException]):
     return fetch
 
 
-def _gsc_fetcher_for(values: dict[str, SearchConsoleMetrics | BaseException]):
-    async def fetch(site_url: str, _start, _end):
-        result = values[site_url]
-        if isinstance(result, BaseException):
-            raise result
-        return result
-
-    return fetch
-
-
 async def test_run_happy_path_two_sites() -> None:
     tg = _FakeTelegramClient()
     persistence = _RecordingPersistence()
-    ga4 = _ga4_fetcher_for({
-        "111": SiteMetrics(
-            total_users=1234,
-            new_users=412,
-            top_pages=(
-                TopPage(page_path="/pricing", views=312),
-                TopPage(page_path="/about", views=220),
+    ga4 = _ga4_fetcher_for(
+        {
+            "111": SiteMetrics(
+                total_users=1234,
+                new_users=412,
+                top_pages=(
+                    TopPage(page_path="/pricing", views=312),
+                    TopPage(page_path="/about", views=220),
+                ),
             ),
-        ),
-        "222": SiteMetrics(
-            total_users=567,
-            new_users=200,
-            top_pages=(TopPage(page_path="/home", views=88),),
-        ),
-    })
-    gsc = _gsc_fetcher_for({
-        "sc-domain:a.example": SearchConsoleMetrics(clicks=87),
-        "sc-domain:b.example": SearchConsoleMetrics(clicks=22),
-    })
-    job = FinCoDailyStatsJob(
-        sites=TWO_SITES, ga4_fetcher=ga4, gsc_fetcher=gsc, now=_fixed_now
+            "222": SiteMetrics(
+                total_users=567,
+                new_users=200,
+                top_pages=(TopPage(page_path="/home", views=88),),
+            ),
+        }
     )
+    job = FinCoDailyStatsJob(sites=TWO_SITES, ga4_fetcher=ga4, now=_fixed_now)
 
     await job.run(_ctx(telegram_client=tg, persistence=persistence))
 
@@ -148,8 +120,6 @@ async def test_run_happy_path_two_sites() -> None:
     assert "B (b.example)" in text
     assert "Visitors: 1,234 (new: 412)" in text
     assert "/pricing — 312" in text
-    assert "Search clicks: 87" in text
-    assert "Search clicks: 22" in text
 
     assert len(persistence.responses) == 1
     row = persistence.responses[0]
@@ -161,67 +131,33 @@ async def test_run_happy_path_two_sites() -> None:
 
 async def test_run_omits_failed_ga4_lines_for_one_site() -> None:
     tg = _FakeTelegramClient()
-    ga4 = _ga4_fetcher_for({
-        "111": GoogleAnalyticsError("boom"),
-        "222": SiteMetrics(total_users=10, new_users=2, top_pages=()),
-    })
-    gsc = _gsc_fetcher_for({
-        "sc-domain:a.example": SearchConsoleMetrics(clicks=9),
-        "sc-domain:b.example": SearchConsoleMetrics(clicks=3),
-    })
-    job = FinCoDailyStatsJob(
-        sites=TWO_SITES, ga4_fetcher=ga4, gsc_fetcher=gsc, now=_fixed_now
+    ga4 = _ga4_fetcher_for(
+        {
+            "111": GoogleAnalyticsError("boom"),
+            "222": SiteMetrics(total_users=10, new_users=2, top_pages=()),
+        }
     )
+    job = FinCoDailyStatsJob(sites=TWO_SITES, ga4_fetcher=ga4, now=_fixed_now)
 
     await job.run(_ctx(telegram_client=tg))
 
     text = tg.sends[0]["text"]
-    # Site A's GA4 lines (Visitors / Top pages) must be absent, but GSC stays.
-    assert "Visitors: 10" in text  # site B still present
-    assert "A (a.example)" in text
+    # Site A's whole section drops out (GA4 was its only source); site B still present.
+    assert "A (a.example)" not in text
     assert "B (b.example)" in text
-    a_section = text.split("A (a.example)")[1].split("B (b.example)")[0]
-    assert "Visitors" not in a_section
-    assert "Search clicks: 9" in a_section
+    assert "Visitors: 10" in text
 
 
-async def test_run_omits_failed_gsc_lines_for_one_site() -> None:
-    tg = _FakeTelegramClient()
-    ga4 = _ga4_fetcher_for({
-        "111": SiteMetrics(total_users=5, new_users=1, top_pages=()),
-        "222": SiteMetrics(total_users=7, new_users=2, top_pages=()),
-    })
-    gsc = _gsc_fetcher_for({
-        "sc-domain:a.example": GoogleSearchConsoleError("nope"),
-        "sc-domain:b.example": SearchConsoleMetrics(clicks=3),
-    })
-    job = FinCoDailyStatsJob(
-        sites=TWO_SITES, ga4_fetcher=ga4, gsc_fetcher=gsc, now=_fixed_now
-    )
-
-    await job.run(_ctx(telegram_client=tg))
-
-    text = tg.sends[0]["text"]
-    a_section = text.split("A (a.example)")[1].split("B (b.example)")[0]
-    assert "Search clicks" not in a_section
-    assert "Visitors: 5" in a_section
-    assert "Search clicks: 3" in text
-
-
-async def test_run_sends_no_data_today_when_all_sources_fail() -> None:
+async def test_run_sends_no_data_today_when_all_ga4_calls_fail() -> None:
     tg = _FakeTelegramClient()
     persistence = _RecordingPersistence()
-    ga4 = _ga4_fetcher_for({
-        "111": GoogleAnalyticsError("a"),
-        "222": GoogleAnalyticsError("b"),
-    })
-    gsc = _gsc_fetcher_for({
-        "sc-domain:a.example": GoogleSearchConsoleError("a"),
-        "sc-domain:b.example": GoogleSearchConsoleError("b"),
-    })
-    job = FinCoDailyStatsJob(
-        sites=TWO_SITES, ga4_fetcher=ga4, gsc_fetcher=gsc, now=_fixed_now
+    ga4 = _ga4_fetcher_for(
+        {
+            "111": GoogleAnalyticsError("a"),
+            "222": GoogleAnalyticsError("b"),
+        }
     )
+    job = FinCoDailyStatsJob(sites=TWO_SITES, ga4_fetcher=ga4, now=_fixed_now)
 
     await job.run(_ctx(telegram_client=tg, persistence=persistence))
 
@@ -234,14 +170,9 @@ async def test_run_does_nothing_when_chat_id_missing() -> None:
     tg = _FakeTelegramClient()
     persistence = _RecordingPersistence()
     ga4 = _ga4_fetcher_for({"111": SiteMetrics(0, 0, ())})
-    gsc = _gsc_fetcher_for({"sc-domain:a.example": SearchConsoleMetrics(clicks=0)})
-    job = FinCoDailyStatsJob(
-        sites=(SITE_A,), ga4_fetcher=ga4, gsc_fetcher=gsc, now=_fixed_now
-    )
+    job = FinCoDailyStatsJob(sites=(SITE_A,), ga4_fetcher=ga4, now=_fixed_now)
 
-    await job.run(
-        _ctx(chat_id=None, telegram_client=tg, persistence=persistence)
-    )
+    await job.run(_ctx(chat_id=None, telegram_client=tg, persistence=persistence))
 
     assert tg.sends == []
     assert persistence.responses == []
@@ -251,10 +182,7 @@ async def test_run_persists_failure_when_send_raises_and_does_not_propagate() ->
     tg = _FakeTelegramClient(raises=RuntimeError("network down"))
     persistence = _RecordingPersistence()
     ga4 = _ga4_fetcher_for({"111": SiteMetrics(1, 1, ())})
-    gsc = _gsc_fetcher_for({"sc-domain:a.example": SearchConsoleMetrics(clicks=1)})
-    job = FinCoDailyStatsJob(
-        sites=(SITE_A,), ga4_fetcher=ga4, gsc_fetcher=gsc, now=_fixed_now
-    )
+    job = FinCoDailyStatsJob(sites=(SITE_A,), ga4_fetcher=ga4, now=_fixed_now)
 
     # Must not raise — Cloud Scheduler would retry and double-send.
     await job.run(_ctx(telegram_client=tg, persistence=persistence))
@@ -270,10 +198,7 @@ async def test_run_persists_failure_when_send_raises_and_does_not_propagate() ->
 async def test_run_handles_missing_telegram_client() -> None:
     persistence = _RecordingPersistence()
     ga4 = _ga4_fetcher_for({"111": SiteMetrics(1, 1, ())})
-    gsc = _gsc_fetcher_for({"sc-domain:a.example": SearchConsoleMetrics(clicks=1)})
-    job = FinCoDailyStatsJob(
-        sites=(SITE_A,), ga4_fetcher=ga4, gsc_fetcher=gsc, now=_fixed_now
-    )
+    job = FinCoDailyStatsJob(sites=(SITE_A,), ga4_fetcher=ga4, now=_fixed_now)
 
     await job.run(_ctx(telegram_client=None, persistence=persistence))
 
@@ -294,10 +219,7 @@ async def test_run_swallows_persistence_failure() -> None:
 
     tg = _FakeTelegramClient()
     ga4 = _ga4_fetcher_for({"111": SiteMetrics(1, 1, ())})
-    gsc = _gsc_fetcher_for({"sc-domain:a.example": SearchConsoleMetrics(clicks=1)})
-    job = FinCoDailyStatsJob(
-        sites=(SITE_A,), ga4_fetcher=ga4, gsc_fetcher=gsc, now=_fixed_now
-    )
+    job = FinCoDailyStatsJob(sites=(SITE_A,), ga4_fetcher=ga4, now=_fixed_now)
 
     await job.run(_ctx(telegram_client=tg, persistence=_BadPersistence()))
 

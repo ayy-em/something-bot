@@ -32,6 +32,8 @@ class OpenAIFallbackHandler:
     """Send the message to OpenAI; reply with the response."""
 
     name = "openai_fallback"
+    description = "Chat with me — I'll reply via OpenAI."
+    help_usage = "Send any text message"
 
     def matches(self, update: ParsedUpdate, ctx: BotContext) -> bool:
         if not isinstance(update, PrivateMessage):

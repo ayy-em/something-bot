@@ -1,4 +1,4 @@
-"""Static placeholder handlers for ``/start`` and ``/help`` (SPEC §6.6).
+"""``/start`` and ``/help`` command handlers (SPEC §6.6, #27).
 
 Both commands reply to *any* user (QA allowlist does not apply — these are
 the discovery commands new users hit before authorization matters), but
@@ -9,12 +9,12 @@ Telegram's ``@bot_name`` suffix from the ``command`` field, so matching
 ``"/start"`` is sufficient — both ``/start`` and ``/start@SomethingReallyBot``
 arrive here as ``command="/start"``.
 
-The reply text lives in module-level constants so #27 (auto-generated /help
-from the feature registry) can swap the help body without touching the
-matching logic. Handlers are pure: they return :class:`HandlerResult`; the
-webhook performs the send and persistence (#18).
+``/help`` is auto-generated from the feature registry: it walks the
+dispatcher's registered handlers and prints one bullet per handler with
+a non-empty ``description``. See ``routing/help_registry.py``.
 """
 
+from something_really_bot.routing.help_registry import HelpRegistry
 from something_really_bot.routing.types import BotContext, HandlerResult
 from something_really_bot.telegram.models import (
     CommandContent,
@@ -23,7 +23,6 @@ from something_really_bot.telegram.models import (
 )
 
 START_REPLY = "Something Really Bot is online. More features coming soon."
-HELP_REPLY = "Help is not implemented yet. This bot is being rebuilt."
 
 
 class _StaticCommandHandler:
@@ -32,6 +31,8 @@ class _StaticCommandHandler:
     name: str
     command: str
     reply_text: str
+    description: str = ""
+    help_usage: str | None = None
 
     def matches(self, update: ParsedUpdate, _ctx: BotContext) -> bool:
         if not isinstance(update, PrivateMessage):
@@ -48,9 +49,31 @@ class StartCommandHandler(_StaticCommandHandler):
     name = "commands.start"
     command = "/start"
     reply_text = START_REPLY
+    description = "Greeting + intro message."
+    help_usage = "/start"
 
 
-class HelpCommandHandler(_StaticCommandHandler):
+class HelpCommandHandler:
+    """``/help`` command — rendered from the feature registry on each call."""
+
     name = "commands.help"
     command = "/help"
-    reply_text = HELP_REPLY
+    description = "Show this help message."
+    help_usage = "/help"
+
+    def __init__(self, registry: HelpRegistry | None = None) -> None:
+        self._registry = registry or HelpRegistry(lambda: ())
+
+    def matches(self, update: ParsedUpdate, _ctx: BotContext) -> bool:
+        if not isinstance(update, PrivateMessage):
+            return False
+        if not isinstance(update.content, CommandContent):
+            return False
+        return update.content.command == self.command
+
+    async def handle(self, _update: ParsedUpdate, _ctx: BotContext) -> HandlerResult:
+        return HandlerResult(
+            handled=True,
+            handler_name=self.name,
+            reply_text=self._registry.render(),
+        )

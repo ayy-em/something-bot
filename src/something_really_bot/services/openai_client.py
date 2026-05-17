@@ -1,12 +1,15 @@
-"""Async OpenAI client wrapper used by the fallback handler (#23).
+"""Async OpenAI client wrapper used by the fallback handler (#23, #26).
 
 Wraps :class:`openai.AsyncOpenAI` so handlers depend on a small surface
 (``complete(prompt) -> str``) rather than the SDK directly. Keeping it
 isolated lets us swap to a different LLM provider, add caching, or
 inject test doubles without touching feature code.
 
-The system prompt is intentionally minimal and *neutral*: this is a
-no-context MVP (#23). Persistent shared context lands in #26.
+The system prompt is intentionally minimal and *neutral*. Persistent
+shared context (#26) is loaded by an injected
+:class:`OpenAIContextLoader` and prepended after ``SYSTEM_PROMPT`` but
+before the user's prompt. A GCS failure yields no context — the
+completion still runs.
 """
 
 import asyncio
@@ -17,6 +20,10 @@ from pydantic import SecretStr
 
 from something_really_bot.config import get_settings
 from something_really_bot.logging import get_logger
+from something_really_bot.services.openai_context import (
+    OpenAIContextLoader,
+    get_openai_context_loader,
+)
 
 _logger = get_logger(__name__)
 
@@ -44,10 +51,12 @@ class OpenAIClient:
         model: str,
         client: AsyncOpenAI | None = None,
         timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
+        context_loader: OpenAIContextLoader | None = None,
     ) -> None:
         self._model = model
         self._timeout_seconds = timeout_seconds
         self._client = client or AsyncOpenAI(api_key=api_key.get_secret_value())
+        self._context_loader = context_loader
 
     async def complete(self, prompt: str) -> str:
         """Call chat completions with ``SYSTEM_PROMPT`` + ``prompt``.
@@ -55,14 +64,16 @@ class OpenAIClient:
         Raises:
             OpenAIRequestError: any failure (network, parse, timeout).
         """
+        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+        if self._context_loader is not None:
+            for chunk in await self._context_loader.get_context_messages():
+                messages.append({"role": "system", "content": chunk})
+        messages.append({"role": "user", "content": prompt})
         try:
             response = await asyncio.wait_for(
                 self._client.chat.completions.create(
                     model=self._model,
-                    messages=[
-                        {"role": "system", "content": SYSTEM_PROMPT},
-                        {"role": "user", "content": prompt},
-                    ],
+                    messages=messages,
                 ),
                 timeout=self._timeout_seconds,
             )
@@ -96,4 +107,8 @@ def get_openai_client() -> OpenAIClient | None:
     settings = get_settings()
     if settings.openai_api_key is None:
         return None
-    return OpenAIClient(api_key=settings.openai_api_key, model=settings.openai_model)
+    return OpenAIClient(
+        api_key=settings.openai_api_key,
+        model=settings.openai_model,
+        context_loader=get_openai_context_loader(),
+    )

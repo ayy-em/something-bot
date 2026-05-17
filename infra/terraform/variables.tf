@@ -38,6 +38,12 @@ variable "telegram_files_bucket_name" {
   default     = "something-bot-telegram-files"
 }
 
+variable "openai_context_bucket_name" {
+  description = "GCS bucket holding the persistent .md context files prepended to OpenAI completions (#26). Synced from the developer's machine via scripts/context-sync.sh."
+  type        = string
+  default     = "something-bot-openai-context"
+}
+
 variable "cloudrun_settings" {
   description = "Cloud Run runtime knobs. Defaults encode the Cloud Run Settings RFC for SPEC §18.3."
   type = object({
@@ -85,9 +91,39 @@ variable "bigquery_location" {
 }
 
 variable "openai_api_key_secret_name" {
-  description = "Existing Secret Manager secret holding the OpenAI API key. Upper-snake-cased intentionally to match the legacy app.yaml env var name."
+  description = "Existing Secret Manager secret holding the OpenAI API key. Upper-snake-cased to match the env var name injected into Cloud Run."
   type        = string
   default     = "OPENAI_API_KEY"
+}
+
+variable "postgres_dsn_secret_name" {
+  description = "Existing Secret Manager secret holding the DSN of the shared Cloud SQL Postgres instance (#31). The instance lives in a different GCP project; cross-project roles/cloudsql.client on the Cloud Run runtime SA is granted on the owning project, not here."
+  type        = string
+  default     = "POSTGRES_DSN"
+}
+
+variable "postgres_instance_secret_name" {
+  description = "Existing Secret Manager secret holding the Cloud SQL instance connection name (`project:region:instance`) for the shared Postgres instance (#31). Consumed by --add-cloudsql-instances on the Cloud Run deploy step and by PostgresStorage to route through the Auth Proxy socket."
+  type        = string
+  default     = "POSTGRES_INSTANCE"
+}
+
+variable "alerts_email" {
+  description = "Email address that receives Cloud Monitoring alerts for the bot (#28). When empty, the email notification channel and the alert policy are skipped — the log-based metric still gets created so it accumulates a history."
+  type        = string
+  default     = ""
+}
+
+variable "alerts_error_threshold" {
+  description = "Trigger the bot-error-rate alert when the log-based metric exceeds this count in the rolling window (#28)."
+  type        = number
+  default     = 5
+}
+
+variable "alerts_error_window_seconds" {
+  description = "Rolling window over which alerts_error_threshold is evaluated, in seconds (#28). Default 300 = 5 minutes."
+  type        = number
+  default     = 300
 }
 
 variable "something_group_chat_id_secret_name" {
