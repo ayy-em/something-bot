@@ -55,9 +55,7 @@ async def test_get_context_messages_returns_blobs_in_name_order() -> None:
             _FakeBlob(name="context/notes.txt", content=b"ignored"),
         ]
     )
-    loader = OpenAIContextLoader(
-        bucket_name="x", client=client, clock=_ManualClock()
-    )
+    loader = OpenAIContextLoader(bucket_name="x", client=client, clock=_ManualClock())
 
     result = await loader.get_context_messages()
 
@@ -68,9 +66,7 @@ async def test_get_context_messages_caches_within_ttl_and_refreshes_after() -> N
     blobs = [_FakeBlob(name="context/a.md", content=b"hello")]
     client = _FakeStorageClient(blobs=blobs)
     clock = _ManualClock()
-    loader = OpenAIContextLoader(
-        bucket_name="x", client=client, ttl_seconds=10.0, clock=clock
-    )
+    loader = OpenAIContextLoader(bucket_name="x", client=client, ttl_seconds=10.0, clock=clock)
 
     await loader.get_context_messages()
     await loader.get_context_messages()
@@ -86,9 +82,7 @@ async def test_get_context_messages_returns_empty_when_list_raises() -> None:
         def list_blobs(self, *_a, **_k):
             raise RuntimeError("gcs down")
 
-    loader = OpenAIContextLoader(
-        bucket_name="x", client=_BoomClient(), clock=_ManualClock()
-    )
+    loader = OpenAIContextLoader(bucket_name="x", client=_BoomClient(), clock=_ManualClock())
 
     assert await loader.get_context_messages() == ()
 
@@ -101,9 +95,7 @@ async def test_get_context_messages_skips_blob_that_fails_to_download() -> None:
             _FakeBlob(name="context/c.md", content=b"alsogood"),
         ]
     )
-    loader = OpenAIContextLoader(
-        bucket_name="x", client=client, clock=_ManualClock()
-    )
+    loader = OpenAIContextLoader(bucket_name="x", client=client, clock=_ManualClock())
 
     result = await loader.get_context_messages()
 
@@ -113,9 +105,7 @@ async def test_get_context_messages_skips_blob_that_fails_to_download() -> None:
 async def test_get_context_messages_truncates_above_byte_budget() -> None:
     big = b"x" * (MAX_CONTEXT_BYTES + 100)
     client = _FakeStorageClient(blobs=[_FakeBlob(name="context/a.md", content=big)])
-    loader = OpenAIContextLoader(
-        bucket_name="x", client=client, clock=_ManualClock()
-    )
+    loader = OpenAIContextLoader(bucket_name="x", client=client, clock=_ManualClock())
 
     result = await loader.get_context_messages()
 
@@ -130,8 +120,6 @@ async def test_get_context_messages_ignores_non_markdown_blobs() -> None:
             _FakeBlob(name="context/notes.txt", content=b"drop"),
         ]
     )
-    loader = OpenAIContextLoader(
-        bucket_name="x", client=client, clock=_ManualClock()
-    )
+    loader = OpenAIContextLoader(bucket_name="x", client=client, clock=_ManualClock())
 
     assert await loader.get_context_messages() == ("keep",)

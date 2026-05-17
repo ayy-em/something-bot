@@ -104,9 +104,7 @@ class OpenAIContextLoader:
         return _assemble(blobs, self._max_bytes, self._bucket_name)
 
 
-def _assemble(
-    blobs: Iterable[object], max_bytes: int, bucket_name: str
-) -> tuple[str, ...]:
+def _assemble(blobs: Iterable[object], max_bytes: int, bucket_name: str) -> tuple[str, ...]:
     out: list[str] = []
     remaining = max_bytes
     truncated = False
