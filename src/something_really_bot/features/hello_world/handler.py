@@ -1,9 +1,7 @@
-"""Hello-World / parrot handler for authorized QA users (SPEC §6.4 / §6.5).
+"""Hello-World / parrot handler (SPEC §6.4 / §6.5).
 
-Matches plain text messages in a *private* chat from a user whose ID is in
-the QA allowlist (``ctx.settings.telegram_qa_user_ids``). Group, supergroup,
-and channel updates never match — SPEC §6.3 forbids the bot from replying
-anywhere other than 1:1 private chats. Commands (``/start``, ``/help``)
+Matches plain text messages in a *private* chat. Group, supergroup,
+and channel updates never match. Commands (``/start``, ``/help``)
 don't match either; the dispatcher routes them to their own handlers.
 
 The handler is pure: it returns the reply text in :class:`HandlerResult`
@@ -25,22 +23,18 @@ from something_really_bot.telegram.models import (
 
 
 class HelloWorldHandler:
-    """Parrots back text messages from authorized QA users."""
+    """Parrots back text messages in private chats."""
 
     name = "hello_world.parrot"
-    description = "Parrot mode for QA users (only active when HELLO_WORLD_MODE=true)."
+    description = "Parrot mode (only active when HELLO_WORLD_MODE=true)."
     help_usage = "Send a text message"
 
     def matches(self, update: ParsedUpdate, ctx: BotContext) -> bool:
         if not ctx.settings.hello_world_mode:
-            # OpenAI fallback (#23) supersedes this handler unless the
-            # user explicitly enables degraded mode via env flag.
             return False
         if not isinstance(update, PrivateMessage):
             return False
-        if not isinstance(update.content, TextContent):
-            return False
-        return update.from_user.id in ctx.settings.telegram_qa_user_ids
+        return isinstance(update.content, TextContent)
 
     async def handle(self, update: ParsedUpdate, _ctx: BotContext) -> HandlerResult:
         assert isinstance(update, PrivateMessage)

@@ -5,7 +5,6 @@ set; the webhook is responsible for sending. Sending behavior is covered
 in :mod:`tests.unit.test_webhook_dispatch`.
 """
 
-import pytest
 from pydantic import SecretStr
 
 from something_really_bot.config import Settings
@@ -27,19 +26,17 @@ IRINDICA_CHAT_ID = 159278882
 RANDO_ID = 99999999
 
 
-def _settings(allowlist: frozenset[int]) -> Settings:
-    # hello_world_mode=True so the handler matches; OpenAI fallback (#23)
-    # otherwise supersedes this handler in production.
+def _settings() -> Settings:
     return Settings.model_construct(
         telegram_webhook_secret=SecretStr("x"),
         telegram_bot_token=SecretStr("tok"),
-        telegram_qa_user_ids=allowlist,
+        telegram_qa_user_ids=frozenset(),
         hello_world_mode=True,
     )
 
 
-def _ctx(allowlist: frozenset[int]) -> BotContext:
-    return BotContext(settings=_settings(allowlist))
+def _ctx() -> BotContext:
+    return BotContext(settings=_settings())
 
 
 def _private_text(user_id: int, text: str = "hi there") -> PrivateMessage:
@@ -88,19 +85,18 @@ def _channel_post() -> ChannelPost:
     )
 
 
-@pytest.mark.parametrize("user_id", [JM_TG_ID, IRINDICA_CHAT_ID])
-async def test_matches_private_text_from_qa_user(user_id: int) -> None:
+async def test_matches_private_text_from_any_user() -> None:
     handler = HelloWorldHandler()
-    ctx = _ctx(frozenset({JM_TG_ID, IRINDICA_CHAT_ID}))
+    ctx = _ctx()
 
-    assert handler.matches(_private_text(user_id), ctx) is True
+    assert handler.matches(_private_text(JM_TG_ID), ctx) is True
+    assert handler.matches(_private_text(RANDO_ID), ctx) is True
 
 
-@pytest.mark.parametrize("user_id", [JM_TG_ID, IRINDICA_CHAT_ID])
-async def test_handle_returns_parrot_reply(user_id: int) -> None:
+async def test_handle_returns_parrot_reply() -> None:
     handler = HelloWorldHandler()
-    ctx = _ctx(frozenset({JM_TG_ID, IRINDICA_CHAT_ID}))
-    update = _private_text(user_id, text="pong me")
+    ctx = _ctx()
+    update = _private_text(RANDO_ID, text="pong me")
 
     result = await handler.handle(update, ctx)
 
@@ -109,38 +105,30 @@ async def test_handle_returns_parrot_reply(user_id: int) -> None:
     assert result.reply_text == "Hello World\n\nYou said: pong me"
 
 
-async def test_does_not_match_unknown_user() -> None:
+async def test_does_not_match_in_group() -> None:
     handler = HelloWorldHandler()
-    ctx = _ctx(frozenset({JM_TG_ID, IRINDICA_CHAT_ID}))
-
-    assert handler.matches(_private_text(RANDO_ID), ctx) is False
-
-
-async def test_does_not_match_in_group_even_from_qa_user() -> None:
-    handler = HelloWorldHandler()
-    ctx = _ctx(frozenset({JM_TG_ID, IRINDICA_CHAT_ID}))
+    ctx = _ctx()
 
     assert handler.matches(_group_text(JM_TG_ID), ctx) is False
 
 
-async def test_does_not_match_in_supergroup_even_from_qa_user() -> None:
+async def test_does_not_match_in_supergroup() -> None:
     handler = HelloWorldHandler()
-    ctx = _ctx(frozenset({JM_TG_ID, IRINDICA_CHAT_ID}))
+    ctx = _ctx()
 
     assert handler.matches(_supergroup_text(IRINDICA_CHAT_ID), ctx) is False
 
 
 async def test_does_not_match_channel_post() -> None:
     handler = HelloWorldHandler()
-    ctx = _ctx(frozenset({JM_TG_ID, IRINDICA_CHAT_ID}))
+    ctx = _ctx()
 
     assert handler.matches(_channel_post(), ctx) is False
 
 
-async def test_does_not_match_command_from_qa_user() -> None:
-    """Commands (/start, /help) belong to #16, not this handler."""
+async def test_does_not_match_command() -> None:
     handler = HelloWorldHandler()
-    ctx = _ctx(frozenset({JM_TG_ID}))
+    ctx = _ctx()
     update = PrivateMessage(
         update_id=1,
         message_id=2,
@@ -155,15 +143,7 @@ async def test_does_not_match_command_from_qa_user() -> None:
 
 async def test_does_not_match_unsupported_update() -> None:
     handler = HelloWorldHandler()
-    ctx = _ctx(frozenset({JM_TG_ID}))
+    ctx = _ctx()
     update = UnsupportedUpdate(update_id=1, reason="callback_query", raw={})
 
     assert handler.matches(update, ctx) is False
-
-
-async def test_does_not_match_when_allowlist_empty() -> None:
-    """Empty QA allowlist (e.g. parsing the secret failed) → handler is a no-op."""
-    handler = HelloWorldHandler()
-    ctx = _ctx(frozenset())
-
-    assert handler.matches(_private_text(JM_TG_ID), ctx) is False

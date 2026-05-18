@@ -40,13 +40,12 @@ class _RaisingOpenAI:
 
 
 def _ctx(
-    allowlist: frozenset[int] = frozenset({JM_TG_ID}),
     openai_client: Any | None = None,
 ) -> BotContext:
     settings = Settings.model_construct(
         telegram_webhook_secret=SecretStr("x"),
         telegram_bot_token=SecretStr("tok"),
-        telegram_qa_user_ids=allowlist,
+        telegram_qa_user_ids=frozenset(),
         hello_world_mode=False,
     )
     return BotContext(settings=settings, openai_client=openai_client)
@@ -98,14 +97,10 @@ def _channel_post() -> ChannelPost:
     )
 
 
-async def test_matches_qa_private_text() -> None:
+async def test_matches_private_text_from_any_user() -> None:
     handler = OpenAIFallbackHandler()
     assert handler.matches(_private_text(JM_TG_ID), _ctx()) is True
-
-
-async def test_does_not_match_non_qa_user() -> None:
-    handler = OpenAIFallbackHandler()
-    assert handler.matches(_private_text(RANDO_ID), _ctx()) is False
+    assert handler.matches(_private_text(RANDO_ID), _ctx()) is True
 
 
 @pytest.mark.parametrize("factory", [_group_text, _supergroup_text])

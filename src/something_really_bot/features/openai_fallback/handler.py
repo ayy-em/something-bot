@@ -1,8 +1,7 @@
-"""OpenAI chat-completion fallback for unmatched QA private text (#23).
+"""OpenAI chat-completion fallback for unmatched private text (#23).
 
-Matches the same shape as :class:`HelloWorldHandler` (private chat,
-TextContent, from a QA user), but supersedes it: with
-``settings.hello_world_mode == False`` (the default), HelloWorld
+Matches private-chat text messages and supersedes :class:`HelloWorldHandler`:
+with ``settings.hello_world_mode == False`` (the default), HelloWorld
 silently doesn't match and this handler runs instead. Sending
 ``HELLO_WORLD_MODE=true`` flips the precedence for the brief
 degraded-mode window if OpenAI is broken.
@@ -43,9 +42,7 @@ class OpenAIFallbackHandler:
     def matches(self, update: ParsedUpdate, ctx: BotContext) -> bool:
         if not isinstance(update, PrivateMessage):
             return False
-        if not isinstance(update.content, TextContent):
-            return False
-        return update.from_user.id in ctx.settings.telegram_qa_user_ids
+        return isinstance(update.content, TextContent)
 
     async def handle(self, update: ParsedUpdate, ctx: BotContext) -> HandlerResult:
         assert isinstance(update, PrivateMessage)

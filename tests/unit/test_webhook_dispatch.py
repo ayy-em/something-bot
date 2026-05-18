@@ -37,6 +37,20 @@ def _payload(text: str = "/ping") -> dict[str, Any]:
     }
 
 
+def _group_text_payload() -> dict[str, Any]:
+    """Plain text in a group chat — no handler matches this."""
+    return {
+        "update_id": 5050,
+        "message": {
+            "message_id": 3,
+            "date": 1715850000,
+            "chat": {"id": -1001234, "type": "group", "title": "test-group"},
+            "from": {"id": 135499785, "is_bot": False, "first_name": "T"},
+            "text": "totally random text",
+        },
+    }
+
+
 def _photo_payload() -> dict[str, Any]:
     return {
         "update_id": 5100,
@@ -98,7 +112,7 @@ def test_unhandled_payload_persists_event_no_send(stub_external_services) -> Non
     """Text that no handler matches → raw + message rows + update_unhandled event, no send."""
     tg, persistence, _fetcher, _openai = stub_external_services
 
-    response = client.post("/webhook", json=_payload("totally random text"), headers=_headers())
+    response = client.post("/webhook", json=_group_text_payload(), headers=_headers())
 
     assert response.status_code == 200
     assert tg.sends == []  # no reply
@@ -176,7 +190,7 @@ def test_webhook_records_job_history_row_per_handled_message(
 def test_webhook_skips_job_history_for_unhandled_updates(
     stub_external_services, stub_job_history
 ) -> None:
-    response = client.post("/webhook", json=_payload("totally random text"), headers=_headers())
+    response = client.post("/webhook", json=_group_text_payload(), headers=_headers())
 
     assert response.status_code == 200
     assert stub_job_history.rows == []
