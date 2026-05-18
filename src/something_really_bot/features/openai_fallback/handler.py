@@ -10,26 +10,17 @@ degraded-mode window if OpenAI is broken.
 No conversation memory; every message is treated fresh. #26 adds a
 context pipeline.
 
-Sends a short "Thinking…" ack via the Telegram client before the
-completion call so the user sees their query was received even when
-the OpenAI call takes a beat. The substantive reply still goes back
-through ``HandlerResult.reply_text`` so the webhook layer handles the
-response persistence in one place.
+No immediate ack: the LLM reply is the only message we send. Other
+handlers emit a "processing…" placeholder because they take many
+seconds (transcription, video download, OCR); plain chat completion
+returns fast enough that an ack would just be noise.
 """
-
-import contextlib
-from collections.abc import Callable
 
 from something_really_bot.logging import get_logger
 from something_really_bot.routing.types import (
     BotContext,
     HandlerError,
     HandlerResult,
-)
-from something_really_bot.telegram.client import (
-    TelegramClient,
-    TelegramSendError,
-    get_telegram_client,
 )
 from something_really_bot.telegram.models import (
     ParsedUpdate,
@@ -40,7 +31,6 @@ from something_really_bot.telegram.models import (
 _logger = get_logger(__name__)
 
 APOLOGY_REPLY = "Sorry — I couldn't reach the brain on that one. Please try again in a bit."
-THINKING_ACK = "Thinking…"
 
 
 class OpenAIFallbackHandler:
@@ -49,13 +39,6 @@ class OpenAIFallbackHandler:
     name = "openai_fallback"
     description = "Chat with me — I'll reply via OpenAI."
     help_usage = "Send any text message"
-
-    def __init__(
-        self,
-        *,
-        telegram_client_factory: Callable[[], TelegramClient] = get_telegram_client,
-    ) -> None:
-        self._tg_factory = telegram_client_factory
 
     def matches(self, update: ParsedUpdate, ctx: BotContext) -> bool:
         if not isinstance(update, PrivateMessage):
@@ -83,17 +66,6 @@ class OpenAIFallbackHandler:
                     exception_type="OpenAIClientUnavailable",
                     message="OPENAI_API_KEY not configured.",
                 ),
-            )
-
-        # Immediate ack so the user sees their query was received even
-        # when the OpenAI call takes a beat. Failure to ack is benign —
-        # the substantive reply below is the load-bearing message.
-        telegram_client = self._tg_factory()
-        with contextlib.suppress(TelegramSendError):
-            await telegram_client.send_message(
-                chat_id=update.chat_id,
-                text=THINKING_ACK,
-                reply_to_message_id=update.message_id,
             )
 
         try:
