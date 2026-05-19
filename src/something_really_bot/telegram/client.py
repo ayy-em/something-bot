@@ -58,6 +58,7 @@ class TelegramClient:
         *,
         reply_to_message_id: int | None = None,
         parse_mode: str | None = None,
+        disable_notification: bool = False,
     ) -> dict[str, Any]:
         """POST ``sendMessage`` and return the decoded ``result`` field.
 
@@ -68,6 +69,8 @@ class TelegramClient:
         payload: dict[str, Any] = {"chat_id": chat_id, "text": text}
         if parse_mode is not None:
             payload["parse_mode"] = parse_mode
+        if disable_notification:
+            payload["disable_notification"] = True
         if reply_to_message_id is not None:
             payload["reply_parameters"] = {
                 "message_id": reply_to_message_id,

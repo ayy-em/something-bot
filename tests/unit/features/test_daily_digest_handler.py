@@ -101,10 +101,10 @@ class _FakeTelegramClient:
     raises: BaseException | None = None
     message_id: int = 99
 
-    async def send_message(self, chat_id: int, text: str) -> dict[str, Any]:
+    async def send_message(self, chat_id: int, text: str, **kwargs: Any) -> dict[str, Any]:
         if self.raises is not None:
             raise self.raises
-        self.sends.append({"chat_id": chat_id, "text": text})
+        self.sends.append({"chat_id": chat_id, "text": text, **kwargs})
         return {"message_id": self.message_id}
 
 
@@ -168,11 +168,16 @@ async def test_run_happy_path_two_sites() -> None:
     assert len(tg.sends) == 1
     sent = tg.sends[0]
     assert sent["chat_id"] == GROUP_CHAT_ID
+    # Digest goes out silently with MarkdownV2 so bold + emoji render.
+    assert sent["parse_mode"] == "MarkdownV2"
+    assert sent["disable_notification"] is True
     text = sent["text"]
-    assert "2026-05-16" in text
-    assert "A (a.example)" in text
-    assert "B (b.example)" in text
-    assert "Visitors: 1,234 (412 new), 8,765 last 7 days" in text
+    # Date is bolded in MarkdownV2 with dashes escaped.
+    assert "*2026\\-05\\-16*" in text
+    assert "A \\(a\\.example\\)" in text
+    assert "B \\(b\\.example\\)" in text
+    assert "\U0001f440 Visitors: 1,234 \\(412 new\\), 8,765 last 7 days" in text
+    assert "\U0001f51d Top pages:" in text
     assert "pricing — 312" in text
     assert "/pricing" not in text
     # Root path renders as "Homepage" so the line is not empty.
@@ -202,8 +207,8 @@ async def test_run_omits_failed_ga4_lines_for_one_site() -> None:
 
     text = tg.sends[0]["text"]
     # Site A's whole section drops out (GA4 was its only source); site B still present.
-    assert "A (a.example)" not in text
-    assert "B (b.example)" in text
+    assert "A \\(a\\.example\\)" not in text
+    assert "B \\(b\\.example\\)" in text
     assert "Visitors: 10" in text
 
 
@@ -223,7 +228,7 @@ async def test_run_sends_no_data_today_when_all_ga4_calls_fail() -> None:
     await job.run(_ctx(telegram_client=tg, persistence=persistence))
 
     text = tg.sends[0]["text"]
-    assert "No data today." in text
+    assert "No data today\\." in text
     assert persistence.responses[0].success is True
 
 
@@ -306,7 +311,7 @@ async def test_tally_section_omitted_when_history_empty() -> None:
     await job.run(_ctx(telegram_client=tg, job_history_logger=history))
 
     text = tg.sends[0]["text"]
-    assert "Jobs (last 24h)" not in text
+    assert "Bot Jobs Triggered" not in text
 
 
 async def test_tally_section_renders_and_sorts_by_total() -> None:
@@ -326,17 +331,21 @@ async def test_tally_section_renders_and_sorts_by_total() -> None:
     await job.run(_ctx(telegram_client=tg, job_history_logger=history))
 
     text = tg.sends[0]["text"]
-    assert "Jobs (last 24h)" in text
+    assert "Bot Jobs Triggered \\(Last 24hrs\\)" in text
     # video_downloader (total 4) comes before voice_transcription (total 2),
-    # which comes before daily-digest (total 1).
-    vd_pos = text.index("video_downloader")
-    vt_pos = text.index("voice_transcription")
-    dd_pos = text.index("daily-digest")
+    # which comes before daily-digest (total 1). Underscores and dashes are
+    # MarkdownV2 specials, so they're backslash-escaped in the rendered text.
+    vd_pos = text.index("video\\_downloader")
+    vt_pos = text.index("voice\\_transcription")
+    dd_pos = text.index("daily\\-digest")
     assert vd_pos < vt_pos < dd_pos
-    # Failed counts are shown when non-zero, omitted when zero.
-    assert "3 ok, 1 failed" in text
-    assert "2 ok" in text
-    assert "1 ok" in text
+    # Plain success count is shown without the "ok" suffix; failures still get
+    # called out on the right when non-zero.
+    assert "3, 1 failed" in text
+    assert " ok" not in text
+    # The other two jobs both have failed=0 so only the success count appears.
+    voice_line_end = text.index("\n", vt_pos)
+    assert text[vt_pos:voice_line_end].rstrip().endswith("2")
 
 
 async def test_tally_section_omitted_when_postgres_fails() -> None:
@@ -351,8 +360,8 @@ async def test_tally_section_omitted_when_postgres_fails() -> None:
     await job.run(_ctx(telegram_client=tg, job_history_logger=history))
 
     text = tg.sends[0]["text"]
-    assert "Jobs (last 24h)" not in text
-    assert "A (a.example)" in text
+    assert "Bot Jobs Triggered" not in text
+    assert "A \\(a\\.example\\)" in text
 
 
 async def test_tally_only_digest_when_all_sites_fail_but_jobs_ran() -> None:
@@ -370,9 +379,9 @@ async def test_tally_only_digest_when_all_sites_fail_but_jobs_ran() -> None:
     await job.run(_ctx(telegram_client=tg, job_history_logger=history))
 
     text = tg.sends[0]["text"]
-    assert "No data today." not in text
-    assert "Jobs (last 24h)" in text
-    assert "video_downloader" in text
+    assert "No data today\\." not in text
+    assert "Bot Jobs Triggered \\(Last 24hrs\\)" in text
+    assert "video\\_downloader" in text
 
 
 # --------------------------------------------------------------------------- #
@@ -391,8 +400,8 @@ async def test_run_renders_gsc_line_alongside_ga4() -> None:
     await job.run(_ctx(telegram_client=tg))
 
     text = tg.sends[0]["text"]
-    assert "Visitors: 10 (2 new), 70 last 7 days" in text
-    assert "Search: 45 clicks, 1,234 impressions" in text
+    assert "\U0001f440 Visitors: 10 \\(2 new\\), 70 last 7 days" in text
+    assert "\U0001f50d Search: 45 clicks, 1,234 impressions" in text
 
 
 async def test_run_drops_gsc_line_when_only_gsc_fails() -> None:
@@ -409,7 +418,7 @@ async def test_run_drops_gsc_line_when_only_gsc_fails() -> None:
     # GA4 still renders; GSC line is silently absent.
     assert "Visitors: 10" in text
     assert "Search:" not in text
-    assert "A (a.example)" in text
+    assert "A \\(a\\.example\\)" in text
 
 
 async def test_run_keeps_site_section_when_only_ga4_fails_but_gsc_succeeds() -> None:
@@ -422,9 +431,9 @@ async def test_run_keeps_site_section_when_only_ga4_fails_but_gsc_succeeds() -> 
     await job.run(_ctx(telegram_client=tg))
 
     text = tg.sends[0]["text"]
-    assert "A (a.example)" in text
+    assert "A \\(a\\.example\\)" in text
     assert "Visitors:" not in text
-    assert "Search: 99 clicks, 2,222 impressions" in text
+    assert "\U0001f50d Search: 99 clicks, 2,222 impressions" in text
 
 
 async def test_run_drops_whole_site_when_both_sources_fail() -> None:
@@ -436,8 +445,8 @@ async def test_run_drops_whole_site_when_both_sources_fail() -> None:
     await job.run(_ctx(telegram_client=tg))
 
     text = tg.sends[0]["text"]
-    assert "A (a.example)" not in text
-    assert "No data today." in text
+    assert "A \\(a\\.example\\)" not in text
+    assert "No data today\\." in text
 
 
 async def test_run_skips_gsc_when_site_has_no_gsc_site_url() -> None:
@@ -461,5 +470,5 @@ async def test_run_skips_gsc_when_site_has_no_gsc_site_url() -> None:
     await job.run(_ctx(telegram_client=tg))
 
     text = tg.sends[0]["text"]
-    assert "C (c.example)" in text
+    assert "C \\(c\\.example\\)" in text
     assert "Search:" not in text

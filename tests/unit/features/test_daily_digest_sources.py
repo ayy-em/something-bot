@@ -58,10 +58,18 @@ class _FakeGA4Client:
 
 async def test_fetch_site_metrics_parses_two_run_report_responses() -> None:
     # First call returns one row per dateRange: day, then 7-day trailing window.
+    # GA4 auto-adds a ``dateRange`` dimension when multiple ranges are queried —
+    # match that here so the parser identifies rows by dimension value, not position.
     totals = _Response(
         rows=[
-            _Row(metric_values=[_MetricValue("1234"), _MetricValue("412")]),
-            _Row(metric_values=[_MetricValue("8765"), _MetricValue("3000")]),
+            _Row(
+                metric_values=[_MetricValue("1234"), _MetricValue("412")],
+                dimension_values=[_DimensionValue("date_range_0")],
+            ),
+            _Row(
+                metric_values=[_MetricValue("8765"), _MetricValue("3000")],
+                dimension_values=[_DimensionValue("date_range_1")],
+            ),
         ]
     )
     pages = _Response(
@@ -97,6 +105,33 @@ async def test_fetch_site_metrics_parses_two_run_report_responses() -> None:
     assert totals_call.date_ranges[0].end_date == "2026-05-16"
     assert totals_call.date_ranges[1].start_date == "2026-05-10"
     assert totals_call.date_ranges[1].end_date == "2026-05-16"
+
+
+async def test_fetch_site_metrics_resolves_day_and_week_by_dimension_when_rows_swapped() -> None:
+    # GA4 doesn't guarantee row order when only ``dateRange`` is the dimension;
+    # the parser must use the dimension value, not the row index.
+    totals = _Response(
+        rows=[
+            _Row(
+                metric_values=[_MetricValue("8765"), _MetricValue("3000")],
+                dimension_values=[_DimensionValue("date_range_1")],
+            ),
+            _Row(
+                metric_values=[_MetricValue("1234"), _MetricValue("412")],
+                dimension_values=[_DimensionValue("date_range_0")],
+            ),
+        ]
+    )
+    pages = _Response(rows=[])
+    client = _FakeGA4Client(responses=[totals, pages])
+
+    result = await fetch_site_metrics(
+        "280078425", date(2026, 5, 16), date(2026, 5, 16), client=client
+    )
+
+    assert result.total_users == 1234
+    assert result.new_users == 412
+    assert result.total_users_7d == 8765
 
 
 async def test_fetch_site_metrics_handles_empty_responses() -> None:
@@ -170,6 +205,9 @@ async def test_fetch_site_search_metrics_parses_clicks_and_impressions() -> None
     assert call["body"]["startDate"] == "2026-05-16"
     assert call["body"]["endDate"] == "2026-05-16"
     assert "dimensions" not in call["body"]
+    # ``dataState=all`` includes the unfinalized last ~2-3 days so the
+    # digest sees real numbers instead of zeros.
+    assert call["body"]["dataState"] == "all"
 
 
 async def test_fetch_site_search_metrics_treats_empty_rows_as_zero() -> None:

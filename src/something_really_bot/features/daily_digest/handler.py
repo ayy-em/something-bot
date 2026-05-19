@@ -45,6 +45,16 @@ _logger = get_logger(__name__)
 REPORT_TIMEZONE = ZoneInfo("Europe/Amsterdam")
 JOB_TALLY_WINDOW = timedelta(hours=24)
 
+# MarkdownV2 reserves these characters anywhere in a message; missed escapes
+# return a 400 from Telegram.
+_MARKDOWN_V2_SPECIAL = r"_*[]()~`>#+-=|{}.!\\"
+_MARKDOWN_V2_TABLE = str.maketrans({ch: f"\\{ch}" for ch in _MARKDOWN_V2_SPECIAL})
+
+
+def _md(text: str) -> str:
+    """Escape ``text`` for Telegram MarkdownV2."""
+    return text.translate(_MARKDOWN_V2_TABLE)
+
 GA4Fetcher = Callable[[str, date, date], Awaitable[SiteMetrics]]
 GSCFetcher = Callable[[str, date, date], Awaitable[SiteSearchMetrics]]
 
@@ -149,7 +159,7 @@ class DailyDigestJob:
         parts: tuple[_SitePart, ...],
         tally: list[JobTallyRow],
     ) -> str:
-        header = f"\U0001f4ca Daily Website Stats: **{report_date.isoformat()}**"
+        header = f"\U0001f4ca Daily Website Stats: *{_md(report_date.isoformat())}*"
         body_sections: list[str] = []
         for part in parts:
             section = self._compose_site_section(part)
@@ -159,7 +169,7 @@ class DailyDigestJob:
         tally_section = self._compose_tally_section(tally)
 
         if not body_sections and tally_section is None:
-            return f"{header}\n\nNo data today."
+            return f"{header}\n\nNo data today\\."
 
         sections: list[str] = [header, *body_sections]
         if tally_section is not None:
@@ -178,37 +188,38 @@ class DailyDigestJob:
         if part.ga4 is not None:
             ga4 = part.ga4
             site_lines.append(
-                f"  :eyes: Visitors: {ga4.total_users:,} ({ga4.new_users:,} new), "
-                f"{ga4.total_users_7d:,} last 7 days"
+                f"  \U0001f440 Visitors: {_md(f'{ga4.total_users:,}')} "
+                f"\\({_md(f'{ga4.new_users:,}')} new\\), "
+                f"{_md(f'{ga4.total_users_7d:,}')} last 7 days"
             )
 
         if part.gsc is not None:
             gsc = part.gsc
             site_lines.append(
-                f"  :mag: Search: {gsc.clicks:,} clicks, {gsc.impressions:,} impressions"
+                f"  \U0001f50d Search: {_md(f'{gsc.clicks:,}')} clicks, "
+                f"{_md(f'{gsc.impressions:,}')} impressions"
             )
 
         if part.ga4 is not None and part.ga4.top_pages:
-            site_lines.append("  :top: Top pages:")
+            site_lines.append("  \U0001f51d Top pages:")
             for idx, page in enumerate(part.ga4.top_pages, start=1):
                 display_path = page.page_path.removeprefix("/") or "Homepage"
-                site_lines.append(f"    {idx}. {display_path} — {page.views:,}")
+                site_lines.append(
+                    f"    {idx}\\. {_md(display_path)} — {_md(f'{page.views:,}')}"
+                )
 
-        header = f"{site.label} ({site.domain})"
+        header = f"{_md(site.label)} \\({_md(site.domain)}\\)"
         return "\n".join([header, *site_lines])
 
     def _compose_tally_section(self, tally: list[JobTallyRow]) -> str | None:
         if not tally:
             return None
         max_name_width = max(len(row.job_name) for row in tally)
-        lines = ["Jobs (last 24h)"]
+        lines = ["Bot Jobs Triggered \\(Last 24hrs\\)"]
         for row in tally:
-            counts: list[str] = []
-            if row.succeeded:
-                counts.append(f"{row.succeeded} ok")
-            if row.failed:
-                counts.append(f"{row.failed} failed")
-            lines.append(f"  {row.job_name.ljust(max_name_width)}  {', '.join(counts)}")
+            name = _md(row.job_name.ljust(max_name_width))
+            suffix = f", {row.failed} failed" if row.failed else ""
+            lines.append(f"  {name}  {row.succeeded}{_md(suffix)}")
         return "\n".join(lines)
 
     async def _send_and_persist(self, ctx: BotContext, chat_id: int, text: str) -> None:
@@ -223,7 +234,12 @@ class DailyDigestJob:
             _logger.warning(error)
         else:
             try:
-                response = await client.send_message(chat_id=chat_id, text=text)
+                response = await client.send_message(
+                    chat_id=chat_id,
+                    text=text,
+                    parse_mode="MarkdownV2",
+                    disable_notification=True,
+                )
             except Exception as exc:  # noqa: BLE001 — never let the scheduler retry
                 error = f"{type(exc).__name__}: {exc}"
                 _logger.warning("daily_digest_send_failed", extra={"error": error})

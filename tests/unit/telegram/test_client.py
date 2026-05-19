@@ -83,6 +83,34 @@ async def test_send_message_includes_parse_mode_when_set() -> None:
     assert captured["body"]["parse_mode"] == "HTML"
 
 
+async def test_send_message_includes_disable_notification_when_set() -> None:
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(200, json={"ok": True, "result": {"message_id": 1}})
+
+    client = _client_with_handler(handler)
+
+    await client.send_message(chat_id=1, text="hi", disable_notification=True)
+
+    assert captured["body"]["disable_notification"] is True
+
+
+async def test_send_message_omits_disable_notification_by_default() -> None:
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(200, json={"ok": True, "result": {"message_id": 1}})
+
+    client = _client_with_handler(handler)
+
+    await client.send_message(chat_id=1, text="hi")
+
+    assert "disable_notification" not in captured["body"]
+
+
 async def test_send_message_includes_reply_parameters() -> None:
     captured: dict = {}
 

@@ -106,6 +106,11 @@ def _fetch_site_search_metrics_sync(
         # ``dimensions=["query"]`` later (issue follow-up) lets us
         # surface top queries without a second call.
         "rowLimit": 1,
+        # GSC's default ``dataState=final`` excludes the last ~2-3 days
+        # (data isn't yet stable). The digest runs the morning after, so
+        # without "all" we routinely see 0 clicks / 0 impressions even
+        # when GSC's web UI shows real numbers.
+        "dataState": "all",
     }
     response = (
         resolved_service.searchanalytics()  # type: ignore[attr-defined]

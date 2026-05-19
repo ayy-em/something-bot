@@ -138,10 +138,26 @@ def _fetch_site_metrics_sync(
 
 
 def _extract_totals(response: object) -> tuple[int, int, int]:
+    # GA4 auto-adds a ``dateRange`` dimension when more than one date range
+    # is supplied. The row order is not guaranteed, so look the day row
+    # ("date_range_0") and the 7-day row ("date_range_1") up by dimension
+    # value instead of by position.
     rows = getattr(response, "rows", None) or []
-    day_total, day_new = _row_totals(rows[0]) if len(rows) > 0 else (0, 0)
-    week_total, _ = _row_totals(rows[1]) if len(rows) > 1 else (0, 0)
+    by_range = _rows_by_date_range(rows)
+    day_row = by_range.get("date_range_0")
+    week_row = by_range.get("date_range_1")
+    day_total, day_new = _row_totals(day_row) if day_row is not None else (0, 0)
+    week_total, _ = _row_totals(week_row) if week_row is not None else (0, 0)
     return day_total, day_new, week_total
+
+
+def _rows_by_date_range(rows: list[object]) -> dict[str, object]:
+    out: dict[str, object] = {}
+    for idx, row in enumerate(rows):
+        dim_values = getattr(row, "dimension_values", None) or []
+        key = dim_values[0].value if dim_values else f"date_range_{idx}"
+        out[key] = row
+    return out
 
 
 def _row_totals(row: object) -> tuple[int, int]:
