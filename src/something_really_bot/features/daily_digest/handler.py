@@ -55,6 +55,7 @@ def _md(text: str) -> str:
     """Escape ``text`` for Telegram MarkdownV2."""
     return text.translate(_MARKDOWN_V2_TABLE)
 
+
 GA4Fetcher = Callable[[str, date, date], Awaitable[SiteMetrics]]
 GSCFetcher = Callable[[str, date, date], Awaitable[SiteSearchMetrics]]
 
@@ -204,9 +205,7 @@ class DailyDigestJob:
             site_lines.append("  \U0001f51d Top pages:")
             for idx, page in enumerate(part.ga4.top_pages, start=1):
                 display_path = page.page_path.removeprefix("/") or "Homepage"
-                site_lines.append(
-                    f"    {idx}\\. {_md(display_path)} — {_md(f'{page.views:,}')}"
-                )
+                site_lines.append(f"    {idx}\\. {_md(display_path)} — {_md(f'{page.views:,}')}")
 
         header = f"{_md(site.label)} \\({_md(site.domain)}\\)"
         return "\n".join([header, *site_lines])
