@@ -25,7 +25,7 @@ class OnThisDaySection:
         text = await self._safe_fetch(today)
         if text is None:
             return None
-        return f"\U0001f4dc{md('This day in history:')}\n{md(text)}"
+        return f"\U0001f4dc *{md('This day in history:')}*\n{md(text)}"
 
     async def _safe_fetch(self, today: date) -> str | None:
         try:

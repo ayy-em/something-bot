@@ -36,9 +36,9 @@ class ReunionSection:
         if reunion_date is not None:
             line = format_reunion_line(reunion_date, today)
             if line is not None:
-                return md(line)
+                return f"\U0001f91d {md(line)}"
             return None
-        return md("The next reunion date is not yet known :(")
+        return f"\U0001f91d {md('The next reunion date is not yet known :(')}"
 
     async def _safe_fetch(self) -> date | None:
         try:

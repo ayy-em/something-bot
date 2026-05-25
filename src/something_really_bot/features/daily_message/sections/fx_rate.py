@@ -26,8 +26,7 @@ class FxRateSection:
         if rate is None:
             return None
         rate_str = f"{rate:.2f}".replace(".", ",")
-        rate_text = f"Today's exchange rate: €1 = {rate_str} RUB."
-        return f"\U0001f4b6 {md(rate_text)}"
+        return f"\U0001f4b6 {md(f'€1 = {rate_str} RUB')}"
 
     async def _safe_fetch(self) -> float | None:
         try:

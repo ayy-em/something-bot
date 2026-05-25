@@ -221,25 +221,28 @@ async def test_run_happy_path_full_message() -> None:
 
     # Header
     assert "*Today \\(2026\\-05\\-25\\)*" in text
-    # Amsterdam section
-    assert "Amsterdam" in text
-    assert "\\+17\\.\\.\\+14°C \\(feels like \\+16°C\\)" in text
+    # Amsterdam section — bold city name, feels-like emoji, wind/humidity emoji
+    assert "*Amsterdam*" in text
+    assert "\\+17\\.\\.\\+14°C \\(feels like \\+16°C" in text
     assert "Partly cloudy" in text
-    assert "wind 12 km/h W" in text
-    assert "37% humidity" in text
+    assert "\U0001f4a8 12 km/h W" in text
+    assert "\U0001f4a7 37%" in text
     assert "06:23" in text
     assert "20:37" in text
-    # Moscow section
-    assert "Moscow" in text
+    # Moscow section — bold city name
+    assert "*Moscow*" in text
     assert "\\+22\\.\\.\\+15°C" in text
     assert "Mainly clear" in text
-    # Reunion
-    assert "reunion" in text.lower()
+    # Reunion — emoji prefix
+    assert "\U0001f91d" in text
     assert "13 days" in text
-    # Exchange rate
+    # Exchange rate — trimmed, no "Today's exchange rate:"
+    assert "€1" in text
     assert "89,27" in text
     assert "RUB" in text
-    # On this day
+    assert "exchange rate" not in text.lower()
+    # On this day — bold header
+    assert "*This day in history:*" in text
     assert "1955" in text
     assert "Austrian State Treaty" in text
 

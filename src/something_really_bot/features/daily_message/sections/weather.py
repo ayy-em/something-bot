@@ -51,14 +51,28 @@ class WeatherSection:
             return None
 
     def _format_city(self, city: CityConfig, w: CityWeather) -> str:
+        feels_emoji = _feels_like_emoji(w.apparent_temp_max)
         temp_line = (
             f"{md(fmt_temp(w.temp_max))}\\.\\.{md(fmt_temp(w.temp_min))}°C "
-            f"\\(feels like {md(fmt_temp(w.apparent_temp_max))}°C\\)"
+            f"\\(feels like {md(fmt_temp(w.apparent_temp_max))}°C {feels_emoji}\\)"
         )
         condition_line = (
             f"{md(w.weather_description)}, "
-            f"wind {md(str(round(w.wind_speed_max)))} km/h {md(w.wind_direction)}, "
-            f"{md(str(w.humidity_pct))}% humidity"
+            f"\U0001f4a8 {md(str(round(w.wind_speed_max)))} km/h {md(w.wind_direction)}, "
+            f"\U0001f4a7 {md(str(w.humidity_pct))}%"
         )
         sun_line = f"Sunrise at {md(w.sunrise)}, sunset at {md(w.sunset)}\\."
-        return f"{city.flag} {md(city.name)}\n{temp_line}\n{condition_line}\n{sun_line}"
+        return f"{city.flag} *{md(city.name)}*\n{temp_line}\n{condition_line}\n{sun_line}"
+
+
+def _feels_like_emoji(temp: float) -> str:
+    """Pick an emoji based on the feels-like temperature."""
+    if temp > 30:
+        return "\U0001f321️"
+    if temp > 20:
+        return "\U0001f60e"
+    if temp > 10:
+        return "\U0001f324️"
+    if temp > 5:
+        return "\U0001f32c️"
+    return "\U0001f976"
