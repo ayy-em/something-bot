@@ -60,13 +60,14 @@ jobs:
         id: token
         run: |
           access_token=$(gcloud auth print-access-token)
-          token=$(curl -s \
+          response=$(curl -s \
             "https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${{ secrets.GCP_DEPLOYER_SERVICE_ACCOUNT }}:generateIdToken" \
             -H "Authorization: Bearer ${access_token}" \
             -H "Content-Type: application/json" \
-            -d "{\"audience\": \"${{ steps.url.outputs.service_url }}\", \"includeEmail\": true}" \
-            | jq -r '.token')
+            -d "{\"audience\": \"${{ steps.url.outputs.service_url }}\", \"includeEmail\": true}")
+          token=$(echo "${response}" | jq -r '.token')
           if [ -z "${token}" ] || [ "${token}" = "null" ]; then
+            echo "API response: ${response}"
             echo "::error::Failed to generate identity token"
             exit 1
           fi
