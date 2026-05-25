@@ -67,8 +67,7 @@ jobs:
             -d "{\"audience\": \"${{ steps.url.outputs.service_url }}\", \"includeEmail\": true}")
           token=$(echo "${response}" | jq -r '.token')
           if [ -z "${token}" ] || [ "${token}" = "null" ]; then
-            echo "API response: ${response}"
-            echo "::error::Failed to generate identity token"
+            echo "::error::Failed to generate identity token: ${response}"
             exit 1
           fi
           echo "::add-mask::${token}"
