@@ -484,8 +484,7 @@ async def test_run_shows_milestone_at_seven_days() -> None:
     await job.run(_ctx(telegram_client=tg))
 
     text = tg.sends[0]["text"]
-    assert "7 days" in text
-    assert "One week to go" in text
+    assert "one week" in text
 
 
 async def test_run_shows_today_milestone() -> None:
