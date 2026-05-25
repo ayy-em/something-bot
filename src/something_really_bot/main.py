@@ -32,6 +32,7 @@ from something_really_bot.features.daily_message.handler import DailyMessageJob
 from something_really_bot.features.dutch_translation.handler import (
     get_dutch_translation_handler,
 )
+from something_really_bot.features.ensure_webhook.handler import EnsureWebhookJob
 from something_really_bot.features.example.handler import PingHandler
 from something_really_bot.features.file_storage.handler import FileStorageHandler
 from something_really_bot.features.hello_world.handler import HelloWorldHandler
@@ -140,6 +141,7 @@ def build_default_job_registry() -> JobRegistry:
     """
     registry = JobRegistry()
     registry.register(TikTokReminderJob())
+    registry.register(EnsureWebhookJob())
     registry.register(DailyMessageJob())
     registry.register(
         DailyMessageJob(

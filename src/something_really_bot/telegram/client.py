@@ -338,6 +338,46 @@ class TelegramClient:
             raise TelegramSendError(f"setMessageReaction not ok: {body.get('description')!r}")
         return body
 
+    async def get_webhook_info(self) -> dict[str, Any]:
+        """GET ``getWebhookInfo`` and return the ``result`` dict.
+
+        Returns:
+            A dict with keys like ``url``, ``has_custom_certificate``,
+            ``pending_update_count``, etc.
+        """
+        url = f"{self._base_url}/bot{self._token.get_secret_value()}/getWebhookInfo"
+        response = await self._request("GET", url)
+        body = response.json()
+        return body.get("result", {})
+
+    async def set_webhook(
+        self,
+        webhook_url: str,
+        *,
+        secret_token: str | None = None,
+    ) -> dict[str, Any]:
+        """POST ``setWebhook`` to point the bot at ``webhook_url``.
+
+        Args:
+            webhook_url: Full HTTPS URL Telegram should POST updates to.
+            secret_token: Optional secret for the X-Telegram-Bot-Api-Secret-Token header.
+
+        Returns:
+            The Telegram API result on success.
+
+        Raises:
+            TelegramSendError: Telegram returned ``ok=false``.
+        """
+        url = f"{self._base_url}/bot{self._token.get_secret_value()}/setWebhook"
+        payload: dict[str, Any] = {"url": webhook_url}
+        if secret_token is not None:
+            payload["secret_token"] = secret_token
+        response = await self._request("POST", url, json=payload)
+        body = response.json()
+        if not body.get("ok"):
+            raise TelegramSendError(f"setWebhook not ok: {body.get('description')!r}")
+        return body.get("result", {})
+
     async def get_file_path(self, file_id: str) -> str:
         """Resolve a ``file_id`` to the relative ``file_path`` Telegram uses
         for downloads.

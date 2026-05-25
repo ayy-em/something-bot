@@ -103,22 +103,16 @@ jobs:
           echo "::add-mask::${conn}"
           echo "connection=${conn}" >> "$GITHUB_OUTPUT"
 
+      - name: Resolve Cloud Run service URL
+        id: svc_url
+        run: |
+          svc_url=$(gcloud run services describe "${SERVICE_NAME}" \
+            --project="${PROJECT_ID}" \
+            --region="${REGION}" \
+            --format='value(status.url)')
+          echo "url=${svc_url}" >> "$GITHUB_OUTPUT"
+
       - name: Deploy to Cloud Run
-        # Secrets injected as env vars at this point:
-        #   - TELEGRAM_WEBHOOK_SECRET (validated by the /webhook handler, #12)
-        #   - TELEGRAM_BOT_TOKEN     (used by TelegramClient.send_message, #15)
-        #   - TELEGRAM_QA_USERS      (parsed into the QA allowlist, #15)
-        #   - OPENAI_API_KEY         (used by the OpenAI fallback handler, #23)
-        #   - POSTGRES_DSN           (shared Cloud SQL connection string, #31)
-        #   - POSTGRES_INSTANCE      (Cloud SQL instance conn name, #31;
-        #                             also passed to --add-cloudsql-instances
-        #                             so Cloud Run mounts the Auth Proxy socket)
-        #   - SOMETHING_GROUP_CHAT_ID  (daily digest target chat, #25, #54)
-        #   - GOOGLE_OAUTH_SECRET_JSON (Desktop OAuth client JSON, #51)
-        #   - GOOGLE_OAUTH_CLIENT_ID   (client_id mirror, #51; not read at runtime)
-        #   - GSC_OAUTH_REFRESH_TOKEN  (personal refresh token for GSC, #51)
-        # Each --set-secrets value must already have at least one Secret
-        # Manager version or the deploy will fail.
         run: |
           gcloud run deploy "${SERVICE_NAME}" \
             --project="${PROJECT_ID}" \
@@ -127,12 +121,26 @@ jobs:
             --service-account="${RUNTIME_SA}" \
             --add-cloudsql-instances="${{ steps.cloudsql.outputs.connection }}" \
             --set-secrets="TELEGRAM_WEBHOOK_SECRET=telegram-webhook-secret-default:latest,TELEGRAM_BOT_TOKEN=telegram-bot-token-default:latest,TELEGRAM_QA_USERS=telegram-qa-users:latest,OPENAI_API_KEY=OPENAI_API_KEY:latest,POSTGRES_DSN=POSTGRES_DSN:latest,POSTGRES_INSTANCE=POSTGRES_INSTANCE:latest,SOMETHING_GROUP_CHAT_ID=SOMETHING_GROUP_CHAT_ID:latest,GOOGLE_OAUTH_SECRET_JSON=GOOGLE_OAUTH_SECRET_JSON:latest,GOOGLE_OAUTH_CLIENT_ID=GOOGLE_OAUTH_CLIENT_ID:latest,GSC_OAUTH_REFRESH_TOKEN=GSC_OAUTH_REFRESH_TOKEN:latest" \
-            --set-env-vars="SCHEDULER_SERVICE_ACCOUNT_EMAIL=something-bot-scheduler-sa@${PROJECT_ID}.iam.gserviceaccount.com,SCHEDULER_ADDITIONAL_EMAILS=${{ secrets.GCP_DEPLOYER_SERVICE_ACCOUNT }},OPENAI_CONTEXT_BUCKET=something-bot-openai-context" \
+            --set-env-vars="SCHEDULER_SERVICE_ACCOUNT_EMAIL=something-bot-scheduler-sa@${PROJECT_ID}.iam.gserviceaccount.com,SCHEDULER_ADDITIONAL_EMAILS=${{ secrets.GCP_DEPLOYER_SERVICE_ACCOUNT }},OPENAI_CONTEXT_BUCKET=something-bot-openai-context,CLOUD_RUN_URL=${{ steps.svc_url.outputs.url }}" \
             --quiet
 
-      - name: Print deployed revision URL
+      - name: Restore Telegram webhook after deploy
         run: |
-          gcloud run services describe "${SERVICE_NAME}" \
-            --project="${PROJECT_ID}" \
-            --region="${REGION}" \
-            --format='value(status.url)'
+          set -eu
+          bot_token=$(gcloud secrets versions access latest \
+            --project="${PROJECT_ID}" --secret="telegram-bot-token-default")
+          echo "::add-mask::${bot_token}"
+          webhook_secret=$(gcloud secrets versions access latest \
+            --project="${PROJECT_ID}" --secret="telegram-webhook-secret-default")
+          echo "::add-mask::${webhook_secret}"
+          webhook_url="${{ steps.svc_url.outputs.url }}/webhook"
+          response=$(curl -sS -X POST \
+            "https://api.telegram.org/bot${bot_token}/setWebhook" \
+            --data-urlencode "url=${webhook_url}" \
+            --data-urlencode "secret_token=${webhook_secret}")
+          ok=$(echo "${response}" | jq -r '.ok')
+          if [ "${ok}" != "true" ]; then
+            echo "::warning::setWebhook after deploy failed: $(echo "${response}" | jq -r '.description // .')"
+          else
+            echo "Webhook restored to ${webhook_url}"
+          fi

@@ -8,6 +8,12 @@
 locals {
   # Per-job configuration.
   scheduled_jobs = {
+    ensure-webhook = {
+      schedule    = "*/15 * * * *"
+      timezone    = "UTC"
+      target_path = "/jobs/ensure-webhook"
+      description = "Self-healing: verify Telegram webhook is set, restore if missing."
+    }
     tiktok-reminder = {
       schedule    = "0 11 * * 5" # Friday 11:00
       timezone    = "Europe/Amsterdam"

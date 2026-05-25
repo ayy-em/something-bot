@@ -117,6 +117,16 @@ class Settings(BaseSettings):
         ),
     )
 
+    # --- Cloud Run self-reference ---
+    cloud_run_url: str | None = Field(
+        default=None,
+        description=(
+            "Base URL of this Cloud Run service (e.g. https://…run.app). "
+            "Set during deploy so the ensure-webhook job can call setWebhook "
+            "with the correct URL. When unset, the job no-ops."
+        ),
+    )
+
     # --- Cloud Scheduler (#22) ---
     scheduler_service_account_email: str | None = Field(
         default=None,
