@@ -1,0 +1,74 @@
+name: Daily Weather QA
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  PROJECT_ID: something-bot-338300
+  REGION: europe-west4
+  SERVICE_NAME: something-really-bot-cloudrun
+
+jobs:
+  preflight:
+    name: Check secrets
+    runs-on: ubuntu-latest
+    outputs:
+      enabled: ${{ steps.check.outputs.enabled }}
+    steps:
+      - name: Verify GCP WIF secrets
+        id: check
+        env:
+          WIF_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          DEPLOYER_SA: ${{ secrets.GCP_DEPLOYER_SERVICE_ACCOUNT }}
+        run: |
+          if [ -n "${WIF_PROVIDER}" ] && [ -n "${DEPLOYER_SA}" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Skipped: GCP_WORKLOAD_IDENTITY_PROVIDER and/or GCP_DEPLOYER_SERVICE_ACCOUNT are unset."
+          fi
+
+  trigger:
+    name: Send daily weather as DM
+    runs-on: ubuntu-latest
+    needs: preflight
+    if: needs.preflight.outputs.enabled == 'true'
+    steps:
+      - name: Authenticate to GCP via Workload Identity Federation
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Get Cloud Run service URL
+        id: url
+        run: |
+          svc_url=$(gcloud run services describe "${SERVICE_NAME}" \
+            --project="${PROJECT_ID}" \
+            --region="${REGION}" \
+            --format='value(status.url)')
+          echo "service_url=${svc_url}" >> "$GITHUB_OUTPUT"
+
+      - name: Obtain identity token for deployer SA
+        id: token
+        run: |
+          token=$(gcloud auth print-identity-token \
+            --audiences="${{ steps.url.outputs.service_url }}")
+          echo "::add-mask::${token}"
+          echo "id_token=${token}" >> "$GITHUB_OUTPUT"
+
+      - name: Invoke daily-weather-qa job
+        run: |
+          status_code=$(curl -s -o /tmp/response.json -w '%{http_code}' \
+            -X POST "${{ steps.url.outputs.service_url }}/jobs/daily-weather-qa" \
+            -H "Authorization: Bearer ${{ steps.token.outputs.id_token }}" \
+            -H "Content-Type: application/json")
+          cat /tmp/response.json
+          if [ "$status_code" != "200" ]; then
+            echo "::error::Job returned HTTP ${status_code}"
+            exit 1
+          fi

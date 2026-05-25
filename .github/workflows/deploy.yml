@@ -127,7 +127,7 @@ jobs:
             --service-account="${RUNTIME_SA}" \
             --add-cloudsql-instances="${{ steps.cloudsql.outputs.connection }}" \
             --set-secrets="TELEGRAM_WEBHOOK_SECRET=telegram-webhook-secret-default:latest,TELEGRAM_BOT_TOKEN=telegram-bot-token-default:latest,TELEGRAM_QA_USERS=telegram-qa-users:latest,OPENAI_API_KEY=OPENAI_API_KEY:latest,POSTGRES_DSN=POSTGRES_DSN:latest,POSTGRES_INSTANCE=POSTGRES_INSTANCE:latest,SOMETHING_GROUP_CHAT_ID=SOMETHING_GROUP_CHAT_ID:latest,GOOGLE_OAUTH_SECRET_JSON=GOOGLE_OAUTH_SECRET_JSON:latest,GOOGLE_OAUTH_CLIENT_ID=GOOGLE_OAUTH_CLIENT_ID:latest,GSC_OAUTH_REFRESH_TOKEN=GSC_OAUTH_REFRESH_TOKEN:latest" \
-            --set-env-vars="SCHEDULER_SERVICE_ACCOUNT_EMAIL=something-bot-scheduler-sa@${PROJECT_ID}.iam.gserviceaccount.com,OPENAI_CONTEXT_BUCKET=something-bot-openai-context" \
+            --set-env-vars="SCHEDULER_SERVICE_ACCOUNT_EMAIL=something-bot-scheduler-sa@${PROJECT_ID}.iam.gserviceaccount.com,SCHEDULER_ADDITIONAL_EMAILS=${{ secrets.GCP_DEPLOYER_SERVICE_ACCOUNT }},OPENAI_CONTEXT_BUCKET=something-bot-openai-context" \
             --quiet
 
       - name: Print deployed revision URL

@@ -29,6 +29,7 @@ from something_really_bot.features.commands.handler import (
     StartCommandHandler,
 )
 from something_really_bot.features.daily_digest.handler import DailyDigestJob
+from something_really_bot.features.daily_weather.handler import DailyWeatherJob
 from something_really_bot.features.dutch_translation.handler import (
     get_dutch_translation_handler,
 )
@@ -38,6 +39,7 @@ from something_really_bot.features.hello_world.handler import HelloWorldHandler
 from something_really_bot.features.make_sticker.handler import (
     get_make_sticker_handler,
 )
+from something_really_bot.features.next_reunion.handler import NextReunionHandler
 from something_really_bot.features.ocr.handler import get_ocr_handler
 from something_really_bot.features.openai_fallback.handler import OpenAIFallbackHandler
 from something_really_bot.features.summarize.handler import get_summarize_handler
@@ -116,6 +118,8 @@ def build_default_dispatcher() -> Dispatcher:
     # Voice transcription owns voice content (#43); FileStorageHandler
     # above intentionally does not match VoiceContent.
     dispatcher.register(get_voice_transcription_handler())
+    # /next-reunion sets or queries the reunion countdown date (#58).
+    dispatcher.register(NextReunionHandler())
     # Command-driven workflows: /dutch claims its trigger + follow-up
     # text replies via pending_action state (#47).
     dispatcher.register(get_dutch_translation_handler())
@@ -138,6 +142,13 @@ def build_default_job_registry() -> JobRegistry:
     registry = JobRegistry()
     registry.register(TikTokReminderJob())
     registry.register(DailyDigestJob())
+    registry.register(DailyWeatherJob())
+    registry.register(
+        DailyWeatherJob(
+            name="daily-weather-qa",
+            chat_id_override=lambda s: s.jm_chat_id,
+        )
+    )
     return registry
 
 

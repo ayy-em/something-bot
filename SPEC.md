@@ -828,6 +828,28 @@ unreachable. A broken database must not break the handler itself.
 
 ---
 
+## 6.19 /next-reunion — Reunion Countdown (#58)
+
+Single-turn command that sets or queries the next reunion date stored in
+`public.reunion_date` (Postgres).
+
+| Aspect | Value |
+| --- | --- |
+| Command | `/next-reunion [YYYY-MM-DD]` |
+| Chat types | Private, group, supergroup |
+| Persistence | Postgres (`public.reunion_date`, single-row table) |
+| Related job | `daily-weather` reads the stored date |
+
+**Behaviour:**
+
+* `/next-reunion 2026-06-15` — upsert the date and reply with a
+  confirmation including the countdown in days.
+* `/next-reunion` (no args) — query the stored date and reply with the
+  remaining days, or "The next reunion date is not yet known :(" if
+  unset.
+
+---
+
 ## 7. Scheduled Jobs
 
 Cron-style work runs via Cloud Scheduler hitting `POST /jobs/{name}` on Cloud Run (#22). Each job is a `JobHandler` registered in `main.py`; the scheduler is defined in `infra/terraform/scheduler.tf` (one entry per job). OIDC verification on the route ensures only the scheduler SA can invoke it.
@@ -843,6 +865,41 @@ Data sources:
 * **`public.job_history_log` (#53)** — per-job `succeeded`/`failed` counts over the trailing 24 hours, rendered as a "Jobs (last 24h)" section appended below the per-site sections.
 
 Graceful degradation: per-site GA4 and GSC fetches run in parallel and fail independently — a site's section drops only if **both** sources fail; otherwise the surviving source renders alone. Postgres failure on the tally query drops only the tally section; if every site fails *and* the tally is empty, the digest still sends "No data today." so the operator notices the failure mode rather than silent absence.
+
+### 7.2 Daily weather forecast (#58)
+
+Daily MarkdownV2 message with weather for Amsterdam and Moscow, a
+EUR/RUB exchange rate, a "this day in history" fact, and a
+reunion-date countdown. Schedule: 05:05 UTC (= 08:05 MSK / 07:05
+CEST). Recipient: `SOMETHING_GROUP_CHAT_ID`. Cloud Scheduler entry:
+`something-bot-daily-weather`. Cloud Run route:
+`POST /jobs/daily-weather`.
+
+Data sources (all fetched in parallel):
+
+* **Open-Meteo** — free, no API key. Daily high/low temperature,
+  feels-like temperature, WMO weather-code → description, wind speed
+  and direction, humidity (averaged from hourly), sunrise/sunset.
+* **open.er-api.com** — free EUR-based exchange rates. Returns the
+  last available rate, so weekends/holidays always have a value.
+  (The ECB suspended EUR/RUB publication in 2022; this is the
+  replacement source.)
+* **Wikimedia REST API** — "On This Day" event selected at random.
+* **`public.reunion_date`** — countdown to the next reunion, set via
+  `/next-reunion` (§6.19). Milestone sentences at 14/7/3/2/1/0 days.
+
+Graceful degradation: every source fails independently — each section
+is simply omitted if its fetch raises. If all sources fail, the job
+sends "No data available today." The job never propagates exceptions
+(same HTTP-200 pattern as the daily digest).
+
+**QA variant** — `daily-weather-qa` is the same job with a
+`chat_id_override` that sends to `jm_chat_id` (extracted from the
+`JM_TG_ID` key of the `telegram-qa-users` secret) instead of the
+group chat. Triggered on demand via the **Daily Weather QA** GitHub
+Actions workflow (`workflow_dispatch`). The deployer SA is authorised
+alongside the scheduler SA via the `SCHEDULER_ADDITIONAL_EMAILS` env
+var so the WIF-authenticated workflow call passes OIDC verification.
 
 ---
 

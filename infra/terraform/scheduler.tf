@@ -14,11 +14,18 @@ locals {
       target_path = "/jobs/tiktok-reminder"
       description = "Friday TikTok reminder for Irindica (#24)."
     }
-    daily-digest = {
-      schedule    = "30 10 * * *" # Daily 10:30
-      timezone    = "Europe/Amsterdam"
-      target_path = "/jobs/daily-digest"
-      description = "Daily website-stats digest + 24h job tally (#25, #54)."
+    # daily-digest paused — replacing with daily-weather (#58).
+    # daily-digest = {
+    #   schedule    = "30 10 * * *"
+    #   timezone    = "Europe/Amsterdam"
+    #   target_path = "/jobs/daily-digest"
+    #   description = "Daily website-stats digest + 24h job tally (#25, #54)."
+    # }
+    daily-weather = {
+      schedule    = "5 5 * * *"
+      timezone    = "UTC"
+      target_path = "/jobs/daily-weather"
+      description = "Daily weather forecast for Amsterdam + Moscow (#58)."
     }
   }
 }

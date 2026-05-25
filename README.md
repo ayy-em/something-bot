@@ -81,6 +81,7 @@ Three GitHub Actions workflows live under `.github/workflows/`:
 | `ci.yml` | PR to `master` | Runs `ruff format --check`, `ruff check`, `pytest`, `terraform fmt -check`, `terraform validate` via the reusable `_checks.yml`. |
 | `deploy.yml` | Push to `master` (markdown/docs paths ignored) | Re-runs the checks, then builds the Docker image, pushes both `${{ github.sha }}` and `latest` tags to Artifact Registry, then `gcloud run deploy` to Cloud Run. Auth via OIDC / Workload Identity Federation only. |
 | `set-telegram-webhook.yml` | `workflow_dispatch` only | Manually points the chosen bot's Telegram webhook at the currently-deployed Cloud Run service. Bot token + webhook secret read from Secret Manager at runtime and masked. |
+| `daily-weather-qa.yml` | `workflow_dispatch` only | Triggers the `daily-weather-qa` job to send the daily weather message as a DM to JM for QA. Authenticates via WIF as the deployer SA. |
 
 ### Required GitHub repo secrets
 
@@ -99,6 +100,35 @@ Before the first deploy can succeed, you need to have already done the steps bel
 2. Read the two outputs above and set them as repo secrets in GitHub.
 3. Push to `master` (or merge a PR) to trigger the first deploy.
 4. Once Cloud Run reports the new image deployed, run the `Set Telegram webhook` workflow from the Actions tab.
+
+## Bot features
+
+### Commands (DM / group)
+
+| Command | Description |
+| --- | --- |
+| `/start` | Welcome message + feature list |
+| `/help` | Show available commands |
+| `/next-reunion [YYYY-MM-DD]` | Set or view the next reunion date |
+| `/dutch` | Translate Dutch text to English |
+| `/make-sticker` | Convert an image to sticker-ready PNG |
+| `/ocr` | Extract text from an image |
+| `/summarize` | TL;DR a document |
+
+### Scheduled jobs
+
+| Job | Schedule | Description |
+| --- | --- | --- |
+| `daily-weather` | 05:05 UTC daily | Weather forecast (Amsterdam + Moscow), EUR/RUB rate, "this day in history", reunion countdown |
+| `daily-weather-qa` | On demand (GitHub Actions) | Same as above, sent as DM to JM for QA |
+| `tiktok-reminder` | Fridays 11:00 CET | Friday TikTok reminder |
+
+### Passive features
+
+- **Video downloader** — auto-downloads TikTok/Reels links shared in chat
+- **Voice transcription** — transcribes voice messages via OpenAI Whisper
+- **File storage** — uploads photos/documents to GCS
+- **OpenAI fallback** — replies to unmatched text via GPT-4o-mini
 
 ## Channels you should totally check out
 

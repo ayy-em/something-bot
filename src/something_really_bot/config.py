@@ -106,12 +106,31 @@ class Settings(BaseSettings):
         description="GCS bucket for Telegram-uploaded files (RFC #19 / decision 0002).",
     )
 
+    # --- Daily weather QA (#58) ---
+    jm_chat_id: Annotated[int | None, NoDecode] = Field(
+        default=None,
+        validation_alias="TELEGRAM_QA_USERS",
+        description=(
+            "JM's private chat_id, extracted from the JM_TG_ID key of the "
+            "telegram-qa-users JSON secret. Used by the daily-weather-qa job "
+            "(#58) to send the daily message as a DM for QA."
+        ),
+    )
+
     # --- Cloud Scheduler (#22) ---
     scheduler_service_account_email: str | None = Field(
         default=None,
         description=(
             "OIDC token issuer for incoming /jobs/<name> calls. Required for the "
             "scheduled-jobs endpoint to accept requests; if unset, /jobs/* always 401."
+        ),
+    )
+    scheduler_additional_emails: str | None = Field(
+        default=None,
+        description=(
+            "Comma-separated list of additional service-account emails allowed "
+            "to invoke /jobs/* (e.g. the deployer SA for QA workflows). "
+            "Checked alongside ``scheduler_service_account_email``."
         ),
     )
 
@@ -206,6 +225,22 @@ class Settings(BaseSettings):
             except (TypeError, ValueError):
                 _logger.warning("telegram_qa_users_unparseable_value", extra={"key": key})
         return frozenset(ids)
+
+    @field_validator("jm_chat_id", mode="before")
+    @classmethod
+    def _parse_jm_chat_id(cls, raw: Any) -> Any:
+        if not isinstance(raw, str):
+            return raw
+        payload = _parse_qa_users_payload(raw)
+        if payload is None:
+            return None
+        value = payload.get("JM_TG_ID")
+        if value is None:
+            return None
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
 
     @field_validator("irindica_chat_id", mode="before")
     @classmethod

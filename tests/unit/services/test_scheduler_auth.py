@@ -156,6 +156,26 @@ def test_jobs_call_records_job_history_on_failure(
     assert row.error_message == "scheduled crash"
 
 
+def test_jobs_call_accepts_additional_sa_email(
+    _configured_scheduler_email,
+    monkeypatch: pytest.MonkeyPatch,
+    _register_test_job: _TestJob,
+) -> None:
+    """An email listed in SCHEDULER_ADDITIONAL_EMAILS is accepted."""
+    from something_really_bot import config
+
+    extra_email = "deployer@something-bot-338300.iam.gserviceaccount.com"
+    config.get_settings.cache_clear()
+    monkeypatch.setenv("SCHEDULER_ADDITIONAL_EMAILS", extra_email)
+    _stub_verify({"email": extra_email}, monkeypatch)
+
+    response = client.post("/jobs/test-job", headers={"Authorization": "Bearer faketoken"})
+
+    assert response.status_code == 200
+    assert _register_test_job.calls == 1
+    config.get_settings.cache_clear()
+
+
 def test_jobs_call_without_scheduler_sa_configured_returns_401(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

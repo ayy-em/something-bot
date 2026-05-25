@@ -73,7 +73,12 @@ def verify_scheduler_oidc_token(
             detail="Invalid OIDC token.",
         ) from exc
 
-    if claims.get("email") != expected_email:
+    allowed_emails: set[str] = {expected_email}
+    extra_csv = settings.scheduler_additional_emails
+    if extra_csv:
+        allowed_emails.update(e.strip() for e in extra_csv.split(",") if e.strip())
+
+    if claims.get("email") not in allowed_emails:
         _logger.warning("scheduler_oidc_wrong_email", extra={"got": claims.get("email")})
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
