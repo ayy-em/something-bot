@@ -18,6 +18,7 @@ import asyncio
 from collections.abc import Awaitable, Callable
 from datetime import UTC, date, datetime
 
+from something_really_bot.config import Settings
 from something_really_bot.features.daily_weather.cities import CITIES, CityConfig
 from something_really_bot.features.daily_weather.sources.fx_rates import (
     fetch_eur_rub_rate,
@@ -29,7 +30,6 @@ from something_really_bot.features.daily_weather.sources.open_meteo import (
 from something_really_bot.features.daily_weather.sources.wikipedia_otd import (
     fetch_on_this_day,
 )
-from something_really_bot.config import Settings
 from something_really_bot.logging import get_logger
 from something_really_bot.persistence import ResponseRecord
 from something_really_bot.routing.types import BotContext
