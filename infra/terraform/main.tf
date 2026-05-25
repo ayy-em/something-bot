@@ -20,6 +20,7 @@ locals {
     "roles/artifactregistry.writer",
     "roles/iam.serviceAccountUser",
     "roles/run.admin",
+    "roles/iam.serviceAccountTokenCreator",
   ]
 
   # Read-only roles for the planner SA used by `terraform plan` in CI

@@ -56,12 +56,20 @@ jobs:
             --format='value(status.url)')
           echo "service_url=${svc_url}" >> "$GITHUB_OUTPUT"
 
-      - name: Obtain identity token for deployer SA
+      - name: Obtain identity token via IAM Credentials API
         id: token
         run: |
-          token=$(gcloud auth print-identity-token \
-            --impersonate-service-account="${{ secrets.GCP_DEPLOYER_SERVICE_ACCOUNT }}" \
-            --audiences="${{ steps.url.outputs.service_url }}")
+          access_token=$(gcloud auth print-access-token)
+          token=$(curl -s \
+            "https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${{ secrets.GCP_DEPLOYER_SERVICE_ACCOUNT }}:generateIdToken" \
+            -H "Authorization: Bearer ${access_token}" \
+            -H "Content-Type: application/json" \
+            -d "{\"audience\": \"${{ steps.url.outputs.service_url }}\", \"includeEmail\": true}" \
+            | jq -r '.token')
+          if [ -z "${token}" ] || [ "${token}" = "null" ]; then
+            echo "::error::Failed to generate identity token"
+            exit 1
+          fi
           echo "::add-mask::${token}"
           echo "id_token=${token}" >> "$GITHUB_OUTPUT"
 
