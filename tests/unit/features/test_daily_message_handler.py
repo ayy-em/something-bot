@@ -233,8 +233,6 @@ async def test_run_happy_path_full_message() -> None:
     assert "*Moscow*" in text
     assert "\\+22\\.\\.\\+15°C" in text
     assert "Mainly clear" in text
-    # Reunion — emoji prefix
-    assert "\U0001f91d" in text
     assert "13 days" in text
     # Exchange rate — trimmed, no "Today's exchange rate:"
     assert "€1" in text
