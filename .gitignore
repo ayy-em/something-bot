@@ -32,6 +32,8 @@ venv/
 # sensitive files
 .env
 creds.json
+app.yaml
+stuff.txt
 
 # terraform plan output (binary zip; may contain sensitive values).
 # Only environments/*.tfvars are tracked; a top-level *.tfvars is almost
