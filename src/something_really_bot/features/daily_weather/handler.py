@@ -174,14 +174,16 @@ class DailyWeatherJob:
             if section is not None:
                 sections.append(section)
 
-        if reunion_date is not None:
-            from something_really_bot.features.daily_weather.reunion import (
-                format_reunion_line,
-            )
+        from something_really_bot.features.daily_weather.reunion import (
+            format_reunion_line,
+        )
 
+        if reunion_date is not None:
             reunion_line = format_reunion_line(reunion_date, today)
             if reunion_line is not None:
                 sections.append(_md(reunion_line))
+        else:
+            sections.append(_md("The next reunion date is not yet known :("))
 
         if rate is not None:
             rate_str = f"{rate:.2f}".replace(".", ",")

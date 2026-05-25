@@ -242,7 +242,7 @@ async def test_run_omits_otd_section_on_failure() -> None:
     assert "Amsterdam" in text
 
 
-async def test_run_omits_reunion_section_when_not_set() -> None:
+async def test_run_shows_not_yet_known_when_reunion_not_set() -> None:
     async def _no_reunion() -> date | None:
         return None
 
@@ -258,7 +258,7 @@ async def test_run_omits_reunion_section_when_not_set() -> None:
     await job.run(_ctx(telegram_client=tg))
 
     text = tg.sends[0]["text"]
-    assert "reunion" not in text.lower()
+    assert "not yet known" in text
     assert "Amsterdam" in text
 
 
@@ -307,7 +307,9 @@ async def test_run_sends_no_data_when_all_sources_fail() -> None:
     await job.run(_ctx(telegram_client=tg, persistence=persistence))
 
     text = tg.sends[0]["text"]
-    assert "No data available today\\." in text
+    assert "not yet known" in text
+    assert "Amsterdam" not in text
+    assert "RUB" not in text
     assert persistence.responses[0].success is True
 
 
