@@ -18,12 +18,12 @@ _CREATE_TABLE_SQL = f"""
 """
 
 MILESTONE_MESSAGES: dict[int, str] = {
-    14: "Two weeks to go! \U0001f389",
-    7: "One week to go! \U0001f973",
-    3: "Only 3 days left! \U0001f483",
-    2: "The day after tomorrow! \U0001f929",
-    1: "TOMORROW! ✈️",
-    0: "TODAY IS THE DAY! \U0001fac6",
+    14: "Two weeks to go! Woo! \U0001f389",
+    7: "Just one week to go! \U0001f973",
+    3: "Only 3 days left! See you soon! \U0001f483",
+    2: "The day after tomorrow a.k.a. послезавтра! \U0001f929",
+    1: "One of you is coming tomorrow! (and maybe both ayoooo) ✈️",
+    0: "TODAY IS THE DAY! Love is in the air!\U0001fac6",
 }
 
 
