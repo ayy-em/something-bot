@@ -44,6 +44,9 @@ jobs:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_DEPLOYER_SERVICE_ACCOUNT }}
 
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
       - name: Get Cloud Run service URL
         id: url
         run: |
@@ -57,6 +60,7 @@ jobs:
         id: token
         run: |
           token=$(gcloud auth print-identity-token \
+            --impersonate-service-account="${{ secrets.GCP_DEPLOYER_SERVICE_ACCOUNT }}" \
             --audiences="${{ steps.url.outputs.service_url }}")
           echo "::add-mask::${token}"
           echo "id_token=${token}" >> "$GITHUB_OUTPUT"
