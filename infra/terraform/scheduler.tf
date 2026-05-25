@@ -21,11 +21,11 @@ locals {
     #   target_path = "/jobs/daily-digest"
     #   description = "Daily website-stats digest + 24h job tally (#25, #54)."
     # }
-    daily-weather = {
+    daily-message = {
       schedule    = "5 5 * * *"
       timezone    = "UTC"
-      target_path = "/jobs/daily-weather"
-      description = "Daily weather forecast for Amsterdam + Moscow (#58)."
+      target_path = "/jobs/daily-message"
+      description = "Daily message with weather, reunion, FX rate, OTD; weekly website stats on Fridays."
     }
   }
 }

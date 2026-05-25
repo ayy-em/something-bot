@@ -81,7 +81,7 @@ Three GitHub Actions workflows live under `.github/workflows/`:
 | `ci.yml` | PR to `master` | Runs `ruff format --check`, `ruff check`, `pytest`, `terraform fmt -check`, `terraform validate` via the reusable `_checks.yml`. |
 | `deploy.yml` | Push to `master` (markdown/docs paths ignored) | Re-runs the checks, then builds the Docker image, pushes both `${{ github.sha }}` and `latest` tags to Artifact Registry, then `gcloud run deploy` to Cloud Run. Auth via OIDC / Workload Identity Federation only. |
 | `set-telegram-webhook.yml` | `workflow_dispatch` only | Manually points the chosen bot's Telegram webhook at the currently-deployed Cloud Run service. Bot token + webhook secret read from Secret Manager at runtime and masked. |
-| `daily-weather-qa.yml` | `workflow_dispatch` only | Triggers the `daily-weather-qa` job to send the daily weather message as a DM to JM for QA. Authenticates via WIF as the deployer SA. |
+| `daily-weather-qa.yml` | `workflow_dispatch` only | Triggers the `daily-message-qa` job to send the daily message as a DM to JM for QA. Authenticates via WIF as the deployer SA. |
 
 ### Required GitHub repo secrets
 
@@ -119,8 +119,8 @@ Before the first deploy can succeed, you need to have already done the steps bel
 
 | Job | Schedule | Description |
 | --- | --- | --- |
-| `daily-weather` | 05:05 UTC daily | Weather forecast (Amsterdam + Moscow), EUR/RUB rate, "this day in history", reunion countdown |
-| `daily-weather-qa` | On demand (GitHub Actions) | Same as above, sent as DM to JM for QA |
+| `daily-message` | 05:05 UTC daily | Weather (Amsterdam + Moscow), reunion countdown, EUR/RUB rate, "this day in history"; weekly website stats on Fridays |
+| `daily-message-qa` | On demand (GitHub Actions) | Same as above, sent as DM to JM for QA |
 | `tiktok-reminder` | Fridays 11:00 CET | Friday TikTok reminder |
 
 ### Passive features

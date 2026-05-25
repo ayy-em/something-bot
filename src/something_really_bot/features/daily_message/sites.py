@@ -1,15 +1,8 @@
-"""Site configuration for the daily digest (#25, #54).
+"""Site configuration for the weekly website stats section.
 
-Adding a new site = add an entry to :data:`SITES`. No schema change,
-no code change. The handler iterates this list, fetches GA4 + GSC per
-site in parallel, and assembles a single digest.
-
-GA4 property IDs are what GA4 Data API calls take; ``ga4_account_id``
-is kept purely for human reference / audit-trail. ``gsc_site_url`` is
-the property identifier the GSC API expects — for domain properties
-it's ``sc-domain:<bare-domain>`` (#51). Sites without GSC verification
-can leave ``gsc_site_url=None`` and the digest will omit their GSC
-line.
+Adding a new site = add an entry to :data:`SITES`. The section iterates
+this list, fetches GA4 + GSC per site in parallel, and assembles a
+weekly stats block with week-on-week comparison.
 """
 
 from dataclasses import dataclass
@@ -17,7 +10,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class SiteConfig:
-    """One website tracked by the daily digest."""
+    """One website tracked by the weekly website stats."""
 
     label: str
     domain: str

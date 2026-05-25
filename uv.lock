@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = "==3.12.*"
 
 [[package]]
@@ -923,6 +923,7 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "pymupdf" },
     { name = "python-docx" },
+    { name = "pyyaml" },
     { name = "uvicorn", extra = ["standard"] },
     { name = "yt-dlp" },
 ]
@@ -950,6 +951,7 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.14,<3" },
     { name = "pymupdf", specifier = ">=1.24,<2" },
     { name = "python-docx", specifier = ">=1.1,<2" },
+    { name = "pyyaml", specifier = ">=6.0,<7" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.47,<0.48" },
     { name = "yt-dlp", specifier = ">=2025.10,<2026" },
 ]

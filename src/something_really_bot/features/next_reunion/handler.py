@@ -8,7 +8,7 @@ Works in private chats, groups, and supergroups.
 
 from datetime import date, datetime
 
-from something_really_bot.features.daily_weather.reunion import (
+from something_really_bot.features.daily_message.reunion import (
     get_reunion_date,
     set_reunion_date,
 )

@@ -808,7 +808,7 @@ the 24-hour tally query.
 (e.g. `voice_transcription`, `commands`, `openai_fallback`,
 `hello_world`, `example`). For scheduled jobs, it's the name
 registered with the `JobRegistry` and used in `scheduler.tf`
-(e.g. `tiktok-reminder`, `daily-digest`).
+(e.g. `tiktok-reminder`, `daily-message`).
 
 **Where it's wired in.**
 
@@ -838,7 +838,7 @@ Single-turn command that sets or queries the next reunion date stored in
 | Command | `/next-reunion [YYYY-MM-DD]` |
 | Chat types | Private, group, supergroup |
 | Persistence | Postgres (`public.reunion_date`, single-row table) |
-| Related job | `daily-weather` reads the stored date |
+| Related job | `daily-message` reads the stored date |
 
 **Behaviour:**
 
@@ -854,50 +854,42 @@ Single-turn command that sets or queries the next reunion date stored in
 
 Cron-style work runs via Cloud Scheduler hitting `POST /jobs/{name}` on Cloud Run (#22). Each job is a `JobHandler` registered in `main.py`; the scheduler is defined in `infra/terraform/scheduler.tf` (one entry per job). OIDC verification on the route ensures only the scheduler SA can invoke it.
 
-### 7.1 Daily digest (#25, generalized in #54)
+### 7.1 Daily message (modular architecture)
 
-Single daily Telegram digest reporting per-site website performance and a 24h tally of bot job invocations. Schedule: 10:30 Europe/Amsterdam. Recipient: the chat id in the `SOMETHING_GROUP_CHAT_ID` Secret Manager secret. Cloud Scheduler entry: `something-bot-daily-digest`. Cloud Run route: `POST /jobs/daily-digest`.
+Single daily MarkdownV2 message composed from pluggable sections
+controlled by a YAML schedule (`features/daily_message/sections.yaml`).
+Schedule: 05:05 UTC (= 08:05 MSK / 07:05 CEST). Recipient:
+`SOMETHING_GROUP_CHAT_ID`. Cloud Scheduler entry:
+`something-bot-daily-message`. Cloud Run route:
+`POST /jobs/daily-message`.
 
-Data sources:
+**Sections (Mon–Thu, Sat–Sun):**
 
-* **Google Analytics 4 Data API** — `totalUsers`, `newUsers`, and the top-5 pages by `screenPageViews`. The Cloud Run runtime SA reads each property; Viewer access is granted via the Admin API since GA4's UI rejects service-account emails. See `scripts/grant_ga4_viewer.py`.
-* **Google Search Console** (#51) — `clicks` and `impressions` for whole-property totals, rendered alongside the GA4 stats. GSC has no Admin API and rejects service-account emails, so the runtime authenticates with a personal-OAuth refresh token (scope: `webmasters.readonly`) minted one-off via `scripts/grant_gsc_refresh_token.py`. Three Secret Manager secrets back this: `GOOGLE_OAUTH_SECRET_JSON` (the full Desktop OAuth client JSON, parsed at runtime), `GOOGLE_OAUTH_CLIENT_ID` (operator-convenience mirror, not read at runtime), and `GSC_OAUTH_REFRESH_TOKEN` (the long-lived refresh token).
-* **`public.job_history_log` (#53)** — per-job `succeeded`/`failed` counts over the trailing 24 hours, rendered as a "Jobs (last 24h)" section appended below the per-site sections.
+* **Weather** — Open-Meteo forecast for Amsterdam and Moscow (temp
+  high/low, feels-like, WMO description, wind, humidity, sunrise/sunset).
+* **Reunion countdown** — days to next reunion from
+  `public.reunion_date`, with milestone sentences at 14/7/3/2/1/0 days.
+  Shows "not yet known" when the date is unset.
+* **EUR/RUB exchange rate** — from open.er-api.com (free, always
+  returns the last available rate).
+* **On This Day** — random historical event from the Wikimedia REST API.
 
-Graceful degradation: per-site GA4 and GSC fetches run in parallel and fail independently — a site's section drops only if **both** sources fail; otherwise the surviving source renders alone. Postgres failure on the tally query drops only the tally section; if every site fails *and* the tally is empty, the digest still sends "No data today." so the operator notices the failure mode rather than silent absence.
+**Friday addition:**
 
-### 7.2 Daily weather forecast (#58)
+* **Weekly website stats** — GA4 visitors + GSC clicks/impressions
+  for the last 7 days with week-on-week comparison. Per-site
+  (FinCo + SR.f) with top-5 pages. GA4 uses service account ADC;
+  GSC uses a personal-OAuth refresh token (see
+  `scripts/grant_gsc_refresh_token.py`).
 
-Daily MarkdownV2 message with weather for Amsterdam and Moscow, a
-EUR/RUB exchange rate, a "this day in history" fact, and a
-reunion-date countdown. Schedule: 05:05 UTC (= 08:05 MSK / 07:05
-CEST). Recipient: `SOMETHING_GROUP_CHAT_ID`. Cloud Scheduler entry:
-`something-bot-daily-weather`. Cloud Run route:
-`POST /jobs/daily-weather`.
+All sections are fetched in parallel with per-source graceful
+degradation — a failed section is simply omitted. If all sections
+fail, the job sends "No data available today."
 
-Data sources (all fetched in parallel):
-
-* **Open-Meteo** — free, no API key. Daily high/low temperature,
-  feels-like temperature, WMO weather-code → description, wind speed
-  and direction, humidity (averaged from hourly), sunrise/sunset.
-* **open.er-api.com** — free EUR-based exchange rates. Returns the
-  last available rate, so weekends/holidays always have a value.
-  (The ECB suspended EUR/RUB publication in 2022; this is the
-  replacement source.)
-* **Wikimedia REST API** — "On This Day" event selected at random.
-* **`public.reunion_date`** — countdown to the next reunion, set via
-  `/next-reunion` (§6.19). Milestone sentences at 14/7/3/2/1/0 days.
-
-Graceful degradation: every source fails independently — each section
-is simply omitted if its fetch raises. If all sources fail, the job
-sends "No data available today." The job never propagates exceptions
-(same HTTP-200 pattern as the daily digest).
-
-**QA variant** — `daily-weather-qa` is the same job with a
-`chat_id_override` that sends to `jm_chat_id` (extracted from the
-`JM_TG_ID` key of the `telegram-qa-users` secret) instead of the
-group chat. Triggered on demand via the **Daily Weather QA** GitHub
-Actions workflow (`workflow_dispatch`). The deployer SA is authorised
+**QA variant** — `daily-message-qa` is the same job with a
+`chat_id_override` that sends to `jm_chat_id` instead of the group
+chat. Triggered on demand via the **Daily Message QA** GitHub Actions
+workflow (`workflow_dispatch`). The deployer SA is authorised
 alongside the scheduler SA via the `SCHEDULER_ADDITIONAL_EMAILS` env
 var so the WIF-authenticated workflow call passes OIDC verification.
 

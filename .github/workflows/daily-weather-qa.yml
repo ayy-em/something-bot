@@ -1,4 +1,4 @@
-name: Daily Weather QA
+name: Daily Message QA
 
 on:
   workflow_dispatch:
@@ -33,7 +33,7 @@ jobs:
           fi
 
   trigger:
-    name: Send daily weather as DM
+    name: Send daily message as DM
     runs-on: ubuntu-latest
     needs: preflight
     if: needs.preflight.outputs.enabled == 'true'
@@ -73,10 +73,10 @@ jobs:
           echo "::add-mask::${token}"
           echo "id_token=${token}" >> "$GITHUB_OUTPUT"
 
-      - name: Invoke daily-weather-qa job
+      - name: Invoke daily-message-qa job
         run: |
           status_code=$(curl -s -o /tmp/response.json -w '%{http_code}' \
-            -X POST "${{ steps.url.outputs.service_url }}/jobs/daily-weather-qa" \
+            -X POST "${{ steps.url.outputs.service_url }}/jobs/daily-message-qa" \
             -H "Authorization: Bearer ${{ steps.token.outputs.id_token }}" \
             -H "Content-Type: application/json")
           cat /tmp/response.json

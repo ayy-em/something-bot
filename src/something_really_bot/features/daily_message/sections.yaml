@@ -1,0 +1,16 @@
+# Daily message section schedule.
+#
+# Order determines display order in the message.
+# days: mon tue wed thu fri sat sun (ISO weekday names).
+# To disable a section, remove it or clear its days list.
+sections:
+  - name: weather
+    days: [mon, tue, wed, thu, fri, sat, sun]
+  - name: reunion
+    days: [mon, tue, wed, thu, fri, sat, sun]
+  - name: fx_rate
+    days: [mon, tue, wed, thu, fri, sat, sun]
+  - name: on_this_day
+    days: [mon, tue, wed, thu, fri, sat, sun]
+  - name: website_stats
+    days: [fri]

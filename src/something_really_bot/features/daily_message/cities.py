@@ -1,4 +1,4 @@
-"""City configuration for the daily weather message."""
+"""City configuration for the daily weather section."""
 
 from dataclasses import dataclass
 

@@ -28,8 +28,7 @@ from something_really_bot.features.commands.handler import (
     HelpCommandHandler,
     StartCommandHandler,
 )
-from something_really_bot.features.daily_digest.handler import DailyDigestJob
-from something_really_bot.features.daily_weather.handler import DailyWeatherJob
+from something_really_bot.features.daily_message.handler import DailyMessageJob
 from something_really_bot.features.dutch_translation.handler import (
     get_dutch_translation_handler,
 )
@@ -141,11 +140,10 @@ def build_default_job_registry() -> JobRegistry:
     """
     registry = JobRegistry()
     registry.register(TikTokReminderJob())
-    registry.register(DailyDigestJob())
-    registry.register(DailyWeatherJob())
+    registry.register(DailyMessageJob())
     registry.register(
-        DailyWeatherJob(
-            name="daily-weather-qa",
+        DailyMessageJob(
+            name="daily-message-qa",
             chat_id_override=lambda s: s.jm_chat_id,
         )
     )

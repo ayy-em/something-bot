@@ -25,7 +25,7 @@ async def fetch_eur_rub_rate(
         http_client: Optional pre-built client for connection reuse / testing.
 
     Returns:
-        The EUR → RUB rate as a float (e.g. ``89.27``).
+        The EUR -> RUB rate as a float (e.g. ``89.27``).
 
     Raises:
         FXRateError: API unreachable, returned an error, or RUB missing.

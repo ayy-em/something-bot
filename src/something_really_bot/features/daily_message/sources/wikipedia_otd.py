@@ -27,7 +27,7 @@ async def fetch_on_this_day(
         http_client: Optional pre-built client for connection reuse / testing.
 
     Returns:
-        A string like ``"1955 — The Austrian State Treaty is signed..."``.
+        A string like ``"1955 -- The Austrian State Treaty is signed..."``.
 
     Raises:
         WikipediaOTDError: API call failed or returned no events.

@@ -1,7 +1,7 @@
 # /next-reunion — Reunion Countdown Command (#58)
 
 Sets or queries the next reunion date. The date is stored in Postgres
-and consumed by the daily weather job to render a countdown.
+and consumed by the daily message job to render a countdown.
 
 ## Usage
 

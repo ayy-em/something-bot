@@ -5,10 +5,10 @@ calls in a thread so the FastAPI event loop is never blocked. Handlers
 should treat this module as the only place that touches GA4.
 
 The metrics surfaced in the daily digest:
-- ``totalUsers``  → site visitors over the report date range
-- ``newUsers``    → new visitors over the report date range
+- ``totalUsers``  -> site visitors over the report date range
+- ``newUsers``    -> new visitors over the report date range
 - ``totalUsers`` over the 7 days ending at ``end_date`` (trailing window)
-- ``pagePath`` × ``screenPageViews`` → top-N pages by views over the
+- ``pagePath`` x ``screenPageViews`` -> top-N pages by views over the
   report date range
 
 If the GA4 call fails, :func:`fetch_site_metrics` raises

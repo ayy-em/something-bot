@@ -1,4 +1,4 @@
-"""Google Search Console wrapper for the daily digest (#51).
+"""Google Search Console wrapper (#51).
 
 The Cloud Run runtime SA can't be added as a GSC user (Google's UI
 rejects non-Google-account emails and there's no Admin API), so GSC
@@ -7,11 +7,11 @@ has property access. The operator runs
 ``scripts/grant_gsc_refresh_token.py`` once to mint that token and
 stores the result in three Secret Manager secrets:
 
-* ``GOOGLE_OAUTH_SECRET_JSON`` — Desktop OAuth client JSON
+* ``GOOGLE_OAUTH_SECRET_JSON`` -- Desktop OAuth client JSON
   (contains ``client_id`` + ``client_secret`` under ``installed``).
-* ``GOOGLE_OAUTH_CLIENT_ID`` — the same ``client_id`` as a standalone
+* ``GOOGLE_OAUTH_CLIENT_ID`` -- the same ``client_id`` as a standalone
   secret. Not read by the runtime; kept for operator convenience.
-* ``GSC_OAUTH_REFRESH_TOKEN`` — the long-lived refresh token from the
+* ``GSC_OAUTH_REFRESH_TOKEN`` -- the long-lived refresh token from the
   one-off flow.
 
 At call time we mint a short-lived access token from those, drive the
@@ -101,10 +101,6 @@ def _fetch_site_search_metrics_sync(
     request_body = {
         "startDate": start_date.isoformat(),
         "endDate": end_date.isoformat(),
-        # No ``dimensions`` → API aggregates over the whole property,
-        # which is exactly the per-site totals we want. Adding
-        # ``dimensions=["query"]`` later (issue follow-up) lets us
-        # surface top queries without a second call.
         "rowLimit": 1,
         # GSC's default ``dataState=final`` excludes the last ~2-3 days
         # (data isn't yet stable). The digest runs the morning after, so
@@ -128,8 +124,6 @@ def _parse_search_analytics_response(response: Any) -> SiteSearchMetrics:
         )
     rows = response.get("rows") or []
     if not rows:
-        # GSC returns no rows when there were zero clicks/impressions
-        # for the window — treat as a valid zero, not as an error.
         return SiteSearchMetrics(clicks=0, impressions=0)
     row = rows[0]
     clicks = _to_int(row.get("clicks", 0))
@@ -141,8 +135,7 @@ def _build_service(settings: Settings) -> Any:
     """Build a credentialed ``webmasters`` v3 client.
 
     Raises :class:`GoogleSearchConsoleError` when any of the three
-    secrets is missing or unparseable — the caller's per-source
-    degradation drops the GSC line and lets the rest of the digest send.
+    secrets is missing or unparseable.
     """
     if settings.google_oauth_secret_json is None:
         raise GoogleSearchConsoleError("GOOGLE_OAUTH_SECRET_JSON is not configured")
@@ -158,8 +151,6 @@ def _build_service(settings: Settings) -> Any:
         refresh_token=settings.gsc_oauth_refresh_token.get_secret_value(),
     )
 
-    # Imports deferred so test doubles don't need googleapiclient
-    # installed and we don't pay the discovery-doc cost at import time.
     from googleapiclient.discovery import build
 
     return build(
