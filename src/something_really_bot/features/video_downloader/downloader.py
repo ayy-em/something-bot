@@ -14,6 +14,7 @@ import asyncio
 from dataclasses import dataclass
 from pathlib import Path
 
+from something_really_bot.features.video_downloader.http_headers import get_random_headers
 from something_really_bot.logging import get_logger
 
 _logger = get_logger(__name__)
@@ -73,6 +74,8 @@ def _download_sync(url: str, output_dir: Path) -> DownloadedVideo:
     output_dir.mkdir(parents=True, exist_ok=True)
     outtmpl = str(output_dir / "%(id)s.%(ext)s")
 
+    headers = get_random_headers()
+
     ydl_opts = {
         "outtmpl": outtmpl,
         "format": (
@@ -89,6 +92,7 @@ def _download_sync(url: str, output_dir: Path) -> DownloadedVideo:
         "no_warnings": True,
         "no_color": True,
         "restrictfilenames": True,
+        "http_headers": headers,
     }
 
     try:
