@@ -49,7 +49,7 @@ from something_really_bot.telegram.models import (
 
 _logger = get_logger(__name__)
 
-COMMAND_NAME = "summarize"
+COMMAND_NAME = "/summarize"
 PROMPT_TEXT = "Now send a PDF, DOCX, TXT, or Markdown file and I'll give you a TL;DR."
 REPLY_PARSE_MODE = "HTML"
 

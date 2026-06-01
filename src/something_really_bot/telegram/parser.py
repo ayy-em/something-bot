@@ -194,6 +194,7 @@ def _extract_command(text: str, entities: list[Any]) -> CommandContent | None:
 
     command_full = text[:length]
     command, _, _ = command_full.partition("@")
+    command = command.replace("-", "_")
     args = text[length:].strip() or None
     return CommandContent(command=command, text=text, args=args)
 

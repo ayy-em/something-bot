@@ -55,7 +55,7 @@ def _command() -> PrivateMessage:
         message_id=42,
         chat_id=100,
         date=1234567890,
-        content=CommandContent(command=COMMAND_NAME, text=f"/{COMMAND_NAME}", args=None),
+        content=CommandContent(command=COMMAND_NAME, text=COMMAND_NAME, args=None),
         from_user=User(id=999, is_bot=False, first_name="t"),
     )
 

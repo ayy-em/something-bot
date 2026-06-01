@@ -48,7 +48,7 @@ def _command() -> PrivateMessage:
         message_id=42,
         chat_id=100,
         date=1234567890,
-        content=CommandContent(command=COMMAND_NAME, text=f"/{COMMAND_NAME}", args=None),
+        content=CommandContent(command=COMMAND_NAME, text=COMMAND_NAME, args=None),
         from_user=User(id=999, is_bot=False, first_name="t"),
     )
 
@@ -202,7 +202,7 @@ def test_does_not_match_photo_without_pending() -> None:
 
 def test_does_not_match_photo_with_other_pending() -> None:
     handler, *_ = _build_handler()
-    assert handler.matches(_photo(), _ctx(_pending("make-sticker"))) is False
+    assert handler.matches(_photo(), _ctx(_pending("/make_sticker"))) is False
 
 
 async def test_command_sets_pending_and_prompts() -> None:

@@ -44,7 +44,7 @@ from something_really_bot.telegram.models import (
 
 _logger = get_logger(__name__)
 
-COMMAND_NAME = "ocr"
+COMMAND_NAME = "/ocr"
 PROMPT_TEXT = "Now send the image and I'll pull the text out of it."
 REPLY_PARSE_MODE = "HTML"
 

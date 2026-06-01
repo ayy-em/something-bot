@@ -111,12 +111,12 @@ def _private_text(text: str) -> PrivateMessage:
 
 def test_matches_private_next_reunion_command() -> None:
     handler = NextReunionHandler()
-    assert handler.matches(_private_command("/next-reunion"), _ctx()) is True
+    assert handler.matches(_private_command("/next_reunion"), _ctx()) is True
 
 
 def test_matches_group_next_reunion_command() -> None:
     handler = NextReunionHandler()
-    assert handler.matches(_group_command("/next-reunion"), _ctx()) is True
+    assert handler.matches(_group_command("/next_reunion"), _ctx()) is True
 
 
 def test_does_not_match_other_commands() -> None:
@@ -141,7 +141,7 @@ async def test_set_date_happy_path(mock_date: Any) -> None:
 
     storage = _FakePostgresStorage()
     handler = NextReunionHandler(_storage=storage)
-    update = _private_command("/next-reunion", "2026-06-15")
+    update = _private_command("/next_reunion", "2026-06-15")
 
     result = await handler.handle(update, _ctx())
 
@@ -154,7 +154,7 @@ async def test_set_date_happy_path(mock_date: Any) -> None:
 async def test_set_date_invalid_format() -> None:
     storage = _FakePostgresStorage()
     handler = NextReunionHandler(_storage=storage)
-    update = _private_command("/next-reunion", "not-a-date")
+    update = _private_command("/next_reunion", "not-a-date")
 
     result = await handler.handle(update, _ctx())
 
@@ -167,7 +167,7 @@ async def test_set_date_storage_failure() -> None:
     storage = _FakePostgresStorage()
     storage.raises_on_execute = RuntimeError("PG down")
     handler = NextReunionHandler(_storage=storage)
-    update = _private_command("/next-reunion", "2026-06-15")
+    update = _private_command("/next_reunion", "2026-06-15")
 
     result = await handler.handle(update, _ctx())
 
@@ -188,7 +188,7 @@ async def test_query_date_shows_countdown(mock_date: Any) -> None:
     storage = _FakePostgresStorage()
     storage._rows = [{"target_date": date(2026, 6, 7)}]
     handler = NextReunionHandler(_storage=storage)
-    update = _private_command("/next-reunion")
+    update = _private_command("/next_reunion")
 
     result = await handler.handle(update, _ctx())
 
@@ -200,7 +200,7 @@ async def test_query_date_shows_countdown(mock_date: Any) -> None:
 async def test_query_date_not_set() -> None:
     storage = _FakePostgresStorage()
     handler = NextReunionHandler(_storage=storage)
-    update = _private_command("/next-reunion")
+    update = _private_command("/next_reunion")
 
     result = await handler.handle(update, _ctx())
 
@@ -212,7 +212,7 @@ async def test_query_date_storage_failure() -> None:
     storage = _FakePostgresStorage()
     storage.raises_on_fetch = RuntimeError("PG down")
     handler = NextReunionHandler(_storage=storage)
-    update = _private_command("/next-reunion")
+    update = _private_command("/next_reunion")
 
     result = await handler.handle(update, _ctx())
 
@@ -232,7 +232,7 @@ async def test_handle_without_storage_returns_error() -> None:
         "something_really_bot.features.next_reunion.handler.get_postgres_storage",
         return_value=None,
     ):
-        result = await handler.handle(_private_command("/next-reunion"), _ctx())
+        result = await handler.handle(_private_command("/next_reunion"), _ctx())
 
     assert result.handled is True
     assert "not configured" in result.reply_text.lower()
@@ -253,8 +253,8 @@ def test_matches_supergroup_command() -> None:
         from_user=_user(),
         chat_title="Super Group",
         content=CommandContent(
-            command="/next-reunion",
-            text="/next-reunion",
+            command="/next_reunion",
+            text="/next_reunion",
         ),
     )
     assert handler.matches(update, _ctx()) is True

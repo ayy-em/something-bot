@@ -46,7 +46,7 @@ from something_really_bot.telegram.models import (
 
 _logger = get_logger(__name__)
 
-COMMAND_NAME = "make-sticker"
+COMMAND_NAME = "/make_sticker"
 PROMPT_TEXT = "Now send the image and I'll turn it into a Telegram sticker."
 
 _ERROR_NOT_AN_IMAGE = "That doesn't look like a photo. Send an image as a photo and I'll try again."

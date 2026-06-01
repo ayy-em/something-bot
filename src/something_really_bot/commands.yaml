@@ -45,6 +45,12 @@ features:
     help_usage: "/summarize, then send a file"
     show_in_menu: true
 
+  - handler_name: example.ping
+    command: /ping
+    description: "Sanity-check liveness — send this, and I should reply with 'pong' (if my creator didn't fuck it up)."
+    help_usage: /ping
+    show_in_menu: true
+
   - handler_name: file_storage.download
     description: "Send me a photo or document — I'll save it."
     help_usage: "Upload a photo/document"
@@ -59,11 +65,13 @@ features:
     help_usage: "/next-reunion [YYYY-MM-DD]"
     show_in_menu: false
 
-  - handler_name: dutch_translation
-    command: /dutch
-    description: "Translate Dutch text into English."
-    help_usage: "/dutch [text] or send /dutch, then the text"
-    show_in_menu: true
+
+
+  - handler_name: daily_message_qa_command
+    command: /daily_message_qa
+    description: "Trigger today's daily message in this chat (QA)."
+    help_usage: /daily_message_qa
+    show_in_menu: false
 
   - handler_name: video_downloader.fetch
     description: "Send an Instagram Reel or TikTok link — I'll fetch the video."
@@ -77,8 +85,4 @@ features:
     description: "Chat with me — I'll reply via OpenAI."
     help_usage: "Send any text message"
 
-  - handler_name: example.ping
-    command: /ping
-    description: "Sanity-check liveness — send this, and I should reply with 'pong' (if my creator didn't fuck it up)."
-    help_usage: /ping
-    show_in_menu: true
+

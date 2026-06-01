@@ -46,7 +46,7 @@ def _command(args: str | None = None) -> PrivateMessage:
         message_id=42,
         chat_id=100,
         date=1234567890,
-        content=CommandContent(command="dutch", text=text, args=args),
+        content=CommandContent(command="/dutch", text=text, args=args),
         from_user=User(id=999, is_bot=False, first_name="t"),
     )
 
@@ -68,7 +68,7 @@ def _group_command() -> GroupMessage:
         message_id=77,
         chat_id=-1001,
         date=1234567890,
-        content=CommandContent(command="dutch", text="/dutch", args=None),
+        content=CommandContent(command="/dutch", text="/dutch", args=None),
         chat_title="grp",
         from_user=User(id=888, is_bot=False),
     )

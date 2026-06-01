@@ -28,6 +28,9 @@ from something_really_bot.features.commands.handler import (
     HelpCommandHandler,
     StartCommandHandler,
 )
+from something_really_bot.features.daily_message.command_handler import (
+    DailyMessageQACommandHandler,
+)
 from something_really_bot.features.daily_message.handler import DailyMessageJob
 from something_really_bot.features.dutch_translation.handler import (
     get_dutch_translation_handler,
@@ -124,6 +127,7 @@ def build_default_dispatcher() -> Dispatcher:
     # Command-driven workflows: /dutch claims its trigger + follow-up
     # text replies via pending_action state (#47).
     dispatcher.register(get_dutch_translation_handler())
+    dispatcher.register(DailyMessageQACommandHandler())
     # Video downloader must precede the OpenAI fallback so a Reel/TikTok
     # URL in plain text doesn't get routed to the LLM.
     dispatcher.register(get_video_downloader_handler())
