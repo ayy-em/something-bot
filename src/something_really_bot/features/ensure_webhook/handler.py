@@ -64,7 +64,7 @@ class EnsureWebhookJob:
         registry = get_command_registry()
         bot_commands = [
             {
-                "command": entry.command.lstrip("/"),
+                "command": entry.command.lstrip("/").replace("-", "_"),
                 "description": entry.description,
             }
             for entry in registry.menu_commands()

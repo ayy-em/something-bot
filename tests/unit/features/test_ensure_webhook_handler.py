@@ -131,7 +131,10 @@ async def test_syncs_commands_on_every_run() -> None:
     assert "help" in command_names
     assert "start" in command_names
     assert "ping" in command_names
+    assert "make_sticker" in command_names
     assert "next-reunion" not in command_names
+    assert "next_reunion" not in command_names
     for cmd in commands:
         assert not cmd["command"].startswith("/")
+        assert "-" not in cmd["command"]
         assert cmd["description"]

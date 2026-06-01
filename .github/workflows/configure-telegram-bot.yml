@@ -123,7 +123,7 @@ jobs:
           for entry in data['features']:
               if entry.get('command') and entry.get('show_in_menu', True):
                   cmds.append({
-                      'command': entry['command'].lstrip('/'),
+                      'command': entry['command'].lstrip('/').replace('-', '_'),
                       'description': entry['description'],
                   })
           print(json.dumps(cmds))
