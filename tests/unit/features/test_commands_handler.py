@@ -76,7 +76,12 @@ def _supergroup_command(command: str) -> SupergroupMessage:
 async def test_start_handler_renders_welcome_with_feature_list() -> None:
     cmd_reg = CommandRegistry(
         [
-            FeatureEntry(handler_name="fake", description="Do a fake thing.", help_usage="/fake"),
+            FeatureEntry(
+                handler_name="fake",
+                description="Do a fake thing.",
+                help_usage="/fake",
+                command="/fake",
+            ),
         ]
     )
     registry = HelpRegistry(cmd_reg)

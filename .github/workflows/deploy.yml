@@ -124,7 +124,8 @@ jobs:
             --set-env-vars="SCHEDULER_SERVICE_ACCOUNT_EMAIL=something-bot-scheduler-sa@${PROJECT_ID}.iam.gserviceaccount.com,SCHEDULER_ADDITIONAL_EMAILS=${{ secrets.GCP_DEPLOYER_SERVICE_ACCOUNT }},OPENAI_CONTEXT_BUCKET=something-bot-openai-context,CLOUD_RUN_URL=${{ steps.svc_url.outputs.url }}" \
             --quiet
 
-      - name: Restore Telegram webhook after deploy
+      - name: Fetch bot token + webhook secret
+        id: secrets
         run: |
           set -eu
           bot_token=$(gcloud secrets versions access latest \
@@ -133,14 +134,58 @@ jobs:
           webhook_secret=$(gcloud secrets versions access latest \
             --project="${PROJECT_ID}" --secret="telegram-webhook-secret-default")
           echo "::add-mask::${webhook_secret}"
+          {
+            echo "bot_token<<EOF"
+            echo "${bot_token}"
+            echo "EOF"
+            echo "webhook_secret<<EOF"
+            echo "${webhook_secret}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Restore Telegram webhook after deploy
+        env:
+          BOT_TOKEN: ${{ steps.secrets.outputs.bot_token }}
+          WEBHOOK_SECRET: ${{ steps.secrets.outputs.webhook_secret }}
+        run: |
+          set -eu
           webhook_url="${{ steps.svc_url.outputs.url }}/webhook"
           response=$(curl -sS -X POST \
-            "https://api.telegram.org/bot${bot_token}/setWebhook" \
+            "https://api.telegram.org/bot${BOT_TOKEN}/setWebhook" \
             --data-urlencode "url=${webhook_url}" \
-            --data-urlencode "secret_token=${webhook_secret}")
+            --data-urlencode "secret_token=${WEBHOOK_SECRET}")
           ok=$(echo "${response}" | jq -r '.ok')
           if [ "${ok}" != "true" ]; then
             echo "::warning::setWebhook after deploy failed: $(echo "${response}" | jq -r '.description // .')"
           else
             echo "Webhook restored to ${webhook_url}"
+          fi
+
+      - name: Register Telegram command menu
+        env:
+          BOT_TOKEN: ${{ steps.secrets.outputs.bot_token }}
+        run: |
+          set -eu
+          commands=$(python3 -c "
+          import yaml, json
+          with open('src/something_really_bot/commands.yaml') as f:
+              data = yaml.safe_load(f)
+          cmds = []
+          for entry in data['features']:
+              if entry.get('command') and entry.get('show_in_menu', True):
+                  cmds.append({
+                      'command': entry['command'].lstrip('/').replace('-', '_'),
+                      'description': entry['description'],
+                  })
+          print(json.dumps(cmds))
+          ")
+          response=$(curl -sS -X POST \
+            "https://api.telegram.org/bot${BOT_TOKEN}/setMyCommands" \
+            -H "Content-Type: application/json" \
+            -d "{\"commands\": ${commands}}")
+          ok=$(echo "${response}" | jq -r '.ok')
+          if [ "${ok}" != "true" ]; then
+            echo "::warning::setMyCommands after deploy failed: $(echo "${response}" | jq -r '.description // .')"
+          else
+            echo "Command menu registered ($(echo "${commands}" | jq length) commands)"
           fi

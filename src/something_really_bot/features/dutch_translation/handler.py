@@ -45,7 +45,7 @@ from something_really_bot.telegram.models import (
 _logger = get_logger(__name__)
 
 COMMAND_NAME = "/dutch"
-PROMPT_TEXT = "Now send the Dutch text you want translated to English."
+PROMPT_TEXT = "Sure! Send me the Dutch text you want translated to English."
 TRANSLATING_ACK = "Translating…"
 REPLY_PARSE_MODE = "HTML"
 

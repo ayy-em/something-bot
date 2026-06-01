@@ -23,6 +23,7 @@ class FeatureEntry:
     help_usage: str | None = None
     command: str | None = None
     show_in_menu: bool = True
+    show_in_help: bool = True
 
 
 class CommandRegistry:
@@ -46,6 +47,7 @@ class CommandRegistry:
                     help_usage=item.get("help_usage"),
                     command=item.get("command"),
                     show_in_menu=item.get("show_in_menu", True),
+                    show_in_help=item.get("show_in_help", True),
                 )
             )
         return cls(entries)

@@ -25,7 +25,7 @@ from something_really_bot.telegram.models import (
     PrivateMessage,
 )
 
-START_HEADER = "👋 Something Really Bot here. I can do the following:"
+START_HEADER = "👋 Something Really Bot here!"
 
 
 class _CommandHandlerBase:
