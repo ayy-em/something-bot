@@ -20,7 +20,10 @@ What exists in the repo today:
   exceptions are captured, not raised. Multi-bot identifier flows through
   the context. `CommandRegistry` (`routing/command_registry.py`) loads
   `commands.yaml` — the single source of truth for feature descriptions,
-  `/help` rendering, and Telegram's `setMyCommands` menu.
+  `/help` rendering, Telegram's `setMyCommands` menu, and access gating.
+  Commands with `trusted_users_only: true` are rejected for users not in
+  `Settings.telegram_qa_user_ids`; the check runs in the dispatcher
+  between `matches()` and `handle()`.
 - Telegram parser (`telegram/`): typed Pydantic models, two-level
   discriminated union (chat type → content kind). 14 unsupported update
   types short-circuit to `UnsupportedUpdate`.

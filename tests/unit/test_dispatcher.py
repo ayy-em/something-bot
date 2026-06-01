@@ -1,9 +1,11 @@
 """Tests for the routing dispatcher."""
 
 import pytest
+from pydantic import SecretStr
 
 from something_really_bot.config import Settings
-from something_really_bot.routing.dispatcher import Dispatcher
+from something_really_bot.routing.command_registry import CommandRegistry, FeatureEntry
+from something_really_bot.routing.dispatcher import UNAUTHORIZED_REPLY, Dispatcher
 from something_really_bot.routing.types import BotContext, HandlerResult
 from something_really_bot.telegram.models import (
     ParsedUpdate,
@@ -153,3 +155,108 @@ async def test_bot_id_flows_through_to_handlers() -> None:
     await dispatcher.dispatch(_private_text(), _ctx(bot_id="another_one"))
 
     assert seen == {"match": "another_one", "handle": "another_one"}
+
+
+# --------------------------------------------------------------------------- #
+# trusted_users_only gating
+# --------------------------------------------------------------------------- #
+
+TRUSTED_USER_ID = 42
+UNTRUSTED_USER_ID = 999
+
+
+def _gated_registry(handler_name: str = "gated") -> CommandRegistry:
+    return CommandRegistry(
+        [
+            FeatureEntry(
+                handler_name=handler_name,
+                description="Gated cmd.",
+                command="/gated",
+                trusted_users_only=True,
+            ),
+        ]
+    )
+
+
+def _ctx_with_qa(*, qa_ids: frozenset[int], bot_id: str = "default") -> BotContext:
+    settings = Settings.model_construct(
+        telegram_webhook_secret=SecretStr("x"),
+        telegram_bot_token=SecretStr("tok"),
+        telegram_qa_user_ids=qa_ids,
+    )
+    return BotContext(settings=settings, bot_id=bot_id)
+
+
+def _private_text_from(user_id: int, text: str = "hi") -> PrivateMessage:
+    return PrivateMessage(
+        update_id=1,
+        message_id=1,
+        chat_id=user_id,
+        date=0,
+        content=TextContent(text=text),
+        from_user=User(id=user_id, is_bot=False, first_name="T"),
+    )
+
+
+@pytest.mark.asyncio
+async def test_gated_handler_allows_trusted_user() -> None:
+    handler = _StubHandler("gated", matches=True)
+    dispatcher = Dispatcher(command_registry=_gated_registry())
+    dispatcher.register(handler)
+
+    result = await dispatcher.dispatch(
+        _private_text_from(TRUSTED_USER_ID),
+        _ctx_with_qa(qa_ids=frozenset({TRUSTED_USER_ID})),
+    )
+
+    assert handler.called is True
+    assert result.handler_name == "gated"
+    assert result.reply_text == "gated"
+
+
+@pytest.mark.asyncio
+async def test_gated_handler_rejects_untrusted_user() -> None:
+    handler = _StubHandler("gated", matches=True)
+    dispatcher = Dispatcher(command_registry=_gated_registry())
+    dispatcher.register(handler)
+
+    result = await dispatcher.dispatch(
+        _private_text_from(UNTRUSTED_USER_ID),
+        _ctx_with_qa(qa_ids=frozenset({TRUSTED_USER_ID})),
+    )
+
+    assert handler.called is False
+    assert result.handled is True
+    assert result.reply_text == UNAUTHORIZED_REPLY
+
+
+@pytest.mark.asyncio
+async def test_ungated_handler_ignores_registry() -> None:
+    registry = CommandRegistry(
+        [
+            FeatureEntry(handler_name="open", description="Open.", command="/open"),
+        ]
+    )
+    handler = _StubHandler("open", matches=True)
+    dispatcher = Dispatcher(command_registry=registry)
+    dispatcher.register(handler)
+
+    result = await dispatcher.dispatch(
+        _private_text_from(UNTRUSTED_USER_ID),
+        _ctx_with_qa(qa_ids=frozenset()),
+    )
+
+    assert handler.called is True
+    assert result.handler_name == "open"
+
+
+@pytest.mark.asyncio
+async def test_gating_without_registry_is_noop() -> None:
+    handler = _StubHandler("any", matches=True)
+    dispatcher = Dispatcher()
+    dispatcher.register(handler)
+
+    result = await dispatcher.dispatch(_private_text_from(UNTRUSTED_USER_ID), _ctx())
+
+    assert handler.called is True
+    assert result.handler_name == "any"

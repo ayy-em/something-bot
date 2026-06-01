@@ -9,12 +9,19 @@ the webhook still acks 200.
 Handler exceptions are captured and surfaced as ``HandlerResult.error``;
 the webhook layer never lets them turn into 5xx (SPEC §6.9 — avoid
 Telegram retry storms).
+
+When a :class:`CommandRegistry` is provided, the dispatcher enforces
+``trusted_users_only`` gating: if a matched handler's registry entry has
+``trusted_users_only: true`` and the sender is not in
+``Settings.telegram_qa_user_ids``, the handler is not called and a
+rejection reply is returned instead.
 """
 
 import logging
 from dataclasses import replace
 from datetime import UTC, datetime
 
+from something_really_bot.routing.command_registry import CommandRegistry
 from something_really_bot.routing.types import (
     BotContext,
     Handler,
@@ -22,28 +29,30 @@ from something_really_bot.routing.types import (
     HandlerResult,
 )
 from something_really_bot.services.job_history import derive_job_name
-from something_really_bot.telegram.models import ParsedUpdate
+from something_really_bot.telegram.models import (
+    GroupMessage,
+    ParsedUpdate,
+    PrivateMessage,
+    SupergroupMessage,
+)
 
 _logger = logging.getLogger(__name__)
+
+UNAUTHORIZED_REPLY = "Sorry, this command is restricted."
 
 
 class Dispatcher:
     """Holds the handler registry for one bot.
 
-    Adding a new feature is a two-step recipe:
-
-    1. Implement a class satisfying :class:`Handler` under
-       ``src/something_really_bot/features/<name>/``.
-    2. Instantiate and ``register`` it on the default dispatcher in
-       ``main.py``.
-
-    Tests construct a fresh :class:`Dispatcher` per case rather than
-    relying on a shared global.
+    Args:
+        command_registry: When provided, enables ``trusted_users_only``
+            gating declared in ``commands.yaml``.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, command_registry: CommandRegistry | None = None) -> None:
         self._handlers: list[Handler] = []
         self._fallback: Handler | None = None
+        self._registry = command_registry
 
     def register(self, handler: Handler) -> None:
         """Append a handler to the match-order list."""
@@ -51,12 +60,7 @@ class Dispatcher:
 
     @property
     def handlers(self) -> tuple[Handler, ...]:
-        """Snapshot of the registered handlers in match order.
-
-        Read-only; used by :class:`HelpRegistry` (#27) to enumerate
-        features at ``/help`` time. Mutating the dispatcher after
-        snapshotting won't be reflected in the returned tuple.
-        """
+        """Snapshot of the registered handlers in match order."""
         return tuple(self._handlers)
 
     def set_fallback(self, handler: Handler) -> None:
@@ -64,18 +68,15 @@ class Dispatcher:
         self._fallback = handler
 
     async def dispatch(self, update: ParsedUpdate, ctx: BotContext) -> HandlerResult:
-        """Find and invoke the matching handler.
-
-        Args:
-            update: The classified Telegram update from
-                :func:`something_really_bot.telegram.parser.parse_update`.
-            ctx: The request-scoped bot context.
-
-        Returns:
-            A :class:`HandlerResult`. Always returned, never raised.
-        """
+        """Find and invoke the matching handler."""
         for handler in self._handlers:
             if handler.matches(update, ctx):
+                if self._is_gated(handler, update, ctx):
+                    return HandlerResult(
+                        handled=True,
+                        handler_name=handler.name,
+                        reply_text=UNAUTHORIZED_REPLY,
+                    )
                 return await self._safe_handle(handler, update, ctx)
 
         if self._fallback is not None:
@@ -86,6 +87,17 @@ class Dispatcher:
             extra={"update_id": getattr(update, "update_id", None), "bot_id": ctx.bot_id},
         )
         return HandlerResult(handled=False)
+
+    def _is_gated(self, handler: Handler, update: ParsedUpdate, ctx: BotContext) -> bool:
+        """Return True if the handler requires trusted users and the sender isn't one."""
+        if self._registry is None:
+            return False
+        entry = self._registry.get(handler.name)
+        if entry is None or not entry.trusted_users_only:
+            return False
+        if not isinstance(update, PrivateMessage | GroupMessage | SupergroupMessage):
+            return True
+        return update.from_user.id not in ctx.settings.telegram_qa_user_ids
 
     @staticmethod
     async def _safe_handle(

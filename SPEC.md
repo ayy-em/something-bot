@@ -307,6 +307,20 @@ and optional `show_in_menu` (defaults to `true`). Display order in
 A CI test enforces that every handler registered in the production
 dispatcher has a corresponding entry in `commands.yaml`.
 
+### 6.6.2 Command Access Gating (`trusted_users_only`)
+
+Commands can be restricted to trusted users by setting
+`trusted_users_only: true` in their `commands.yaml` entry. The
+dispatcher checks this flag after a handler matches but before calling
+`handle()`. If the sender's Telegram user ID is not in
+`Settings.telegram_qa_user_ids`, the handler is skipped and the bot
+replies with a short rejection message.
+
+The trusted user list is sourced from the `TELEGRAM_QA_USERS` Secret
+Manager secret (same list used for QA gating since the initial deploy).
+
+Currently gated commands: `/next_reunion`, `/daily_message_qa`.
+
 ---
 
 ## 6.7 File Handling

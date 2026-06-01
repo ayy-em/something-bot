@@ -1,8 +1,9 @@
 """Centralised feature registry loaded from ``commands.yaml``.
 
 The YAML file is the single source of truth for feature descriptions,
-help text, and Telegram menu visibility.  Both the ``/help`` renderer
-and the ``setMyCommands`` sync job read from it.
+help text, Telegram menu visibility, and access gating.  Both the
+``/help`` renderer and the ``setMyCommands`` sync job read from it.
+The dispatcher uses it to enforce ``trusted_users_only`` gating.
 """
 
 from dataclasses import dataclass
@@ -24,6 +25,7 @@ class FeatureEntry:
     command: str | None = None
     show_in_menu: bool = True
     show_in_help: bool = True
+    trusted_users_only: bool = False
 
 
 class CommandRegistry:
@@ -31,6 +33,7 @@ class CommandRegistry:
 
     def __init__(self, entries: list[FeatureEntry]) -> None:
         self._entries = entries
+        self._by_handler: dict[str, FeatureEntry] = {e.handler_name: e for e in entries}
 
     @classmethod
     def from_yaml(cls, path: Path | None = None) -> "CommandRegistry":
@@ -48,6 +51,7 @@ class CommandRegistry:
                     command=item.get("command"),
                     show_in_menu=item.get("show_in_menu", True),
                     show_in_help=item.get("show_in_help", True),
+                    trusted_users_only=item.get("trusted_users_only", False),
                 )
             )
         return cls(entries)
@@ -56,6 +60,10 @@ class CommandRegistry:
     def entries(self) -> list[FeatureEntry]:
         """All feature entries in display order."""
         return list(self._entries)
+
+    def get(self, handler_name: str) -> FeatureEntry | None:
+        """Look up an entry by handler name."""
+        return self._by_handler.get(handler_name)
 
     def menu_commands(self) -> list[FeatureEntry]:
         """Entries that should appear in Telegram's autocomplete menu."""

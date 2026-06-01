@@ -3,17 +3,19 @@
 # Single source of truth for all bot features. Consumed by:
 # - /help and /start rendering (help_registry.py)
 # - Telegram setMyCommands autocomplete menu (ensure_webhook job)
+# - Command access gating (dispatcher checks trusted_users_only)
 #
 # Order determines display order in /help.
 #
 # Fields:
-#   handler_name  — must match the handler's `name` attribute (required)
-#   description   — shown in /help and Telegram menu (required)
-#   help_usage    — left-hand label in /help bullets (optional)
-#   command       — the /command string, if this is a slash-command (optional)
-#   show_in_menu  — include in Telegram's autocomplete menu (default: true,
-#                   only applies to entries with a command)
-#   show_in_help  — include in /help output (default: true)
+#   handler_name      — must match the handler's `name` attribute (required)
+#   description       — shown in /help and Telegram menu (required)
+#   help_usage        — left-hand label in /help bullets (optional)
+#   command           — the /command string, if this is a slash-command (optional)
+#   show_in_menu      — include in Telegram's autocomplete menu (default: true,
+#                       only applies to entries with a command)
+#   show_in_help      — include in /help output (default: true)
+#   trusted_users_only — restrict to Settings.telegram_qa_user_ids (default: false)
 
 features:
   # --- Meta commands (hidden from /help) ---
@@ -29,7 +31,7 @@ features:
 
   # --- Slash commands ---
   - handler_name: make_sticker
-    command: /make-sticker
+    command: /make_sticker
     description: "Convert an image into a Telegram sticker-ready PNG."
     help_usage: /make_sticker
     show_in_menu: true
@@ -53,10 +55,11 @@ features:
     show_in_menu: true
 
   - handler_name: next_reunion
-    command: /next-reunion
+    command: /next_reunion
     description: "Set or view the next reunion date."
     help_usage: /next_reunion
     show_in_menu: false
+    trusted_users_only: true
 
   - handler_name: example.ping
     command: /ping
@@ -69,6 +72,7 @@ features:
     description: "Trigger today's daily message in this chat (QA)."
     help_usage: /daily_message_qa
     show_in_menu: false
+    trusted_users_only: true
 
   # --- Passive features (no slash command) ---
   - handler_name: voice_transcription.transcribe

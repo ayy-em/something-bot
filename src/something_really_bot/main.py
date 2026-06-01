@@ -106,8 +106,9 @@ def build_default_dispatcher() -> Dispatcher:
     Registration order matters: it's both the dispatch precedence and
     the order the auto-generated ``/help`` (#27) lists features in.
     """
-    dispatcher = Dispatcher()
-    help_registry = HelpRegistry(get_command_registry())
+    command_registry = get_command_registry()
+    dispatcher = Dispatcher(command_registry=command_registry)
+    help_registry = HelpRegistry(command_registry)
     dispatcher.register(StartCommandHandler(help_registry))
     dispatcher.register(HelpCommandHandler(help_registry))
     # /make-sticker (#44), /ocr (#45), and /summarize (#46) must precede
