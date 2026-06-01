@@ -63,7 +63,7 @@ features:
 
   - handler_name: example.ping
     command: /ping
-    description: "Sanity-check liveness — send this, and I should reply with 'pong' (if my creator didn't fuck it up)."
+    description: "I'll reply with `pong` (if my creator didn't fuck it up)."
     help_usage: /ping
     show_in_menu: true
 
@@ -83,6 +83,7 @@ features:
 
   - handler_name: file_storage.download
     description: "Send me a photo or document — I'll save it to the cloud."
+    show_in_help: false
 
   - handler_name: openai_fallback
     description: "Simply chat with me — I'll reply at any time, day or night. Powered by GPT-4o-mini. (Though I suffer from amnesia, so I can't remember our conversations.)"

@@ -124,7 +124,7 @@ def test_gated_commands_hidden_from_untrusted_user() -> None:
     assert "Secret." not in body
 
 
-def test_gated_commands_visible_to_trusted_user() -> None:
+def test_gated_commands_in_separate_section_for_trusted_user() -> None:
     reg = _registry(
         FeatureEntry(handler_name="open", description="Open.", command="/o", help_usage="/o"),
         FeatureEntry(
@@ -141,6 +141,11 @@ def test_gated_commands_visible_to_trusted_user() -> None:
 
     assert "Open." in body
     assert "Secret." in body
+    assert "special users" in body
+    open_pos = body.index("Open.")
+    special_pos = body.index("special users")
+    secret_pos = body.index("Secret.")
+    assert open_pos < special_pos < secret_pos
 
 
 def test_gated_commands_visible_when_no_user_context() -> None:
