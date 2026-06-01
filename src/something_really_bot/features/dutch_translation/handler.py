@@ -63,8 +63,6 @@ class DutchTranslationHandler:
     """``/dutch`` command + follow-up text routing."""
 
     name = "dutch_translation"
-    description = "/dutch — translate Dutch text into English."
-    help_usage = "/dutch [text] or send /dutch, then the text"
 
     def __init__(
         self,

@@ -1,46 +1,27 @@
-"""Tests for the auto-generated ``/help`` rendering (#27).
+"""Tests for the ``/help`` rendering backed by :class:`CommandRegistry`."""
 
-Covers:
-- HelpRegistry.render() against a stubbed handler list.
-- Adding a new handler with a description surfaces in /help with no
-  command-handler changes.
-- Every handler registered by ``build_default_dispatcher`` has a
-  non-empty description (CI enforcement for the contract).
-"""
-
-from typing import Any
-
-from something_really_bot.main import build_default_dispatcher
-from something_really_bot.routing.help_registry import (
-    HelpRegistry,
-    collect_descriptions,
+from something_really_bot.routing.command_registry import (
+    CommandRegistry,
+    FeatureEntry,
+    get_command_registry,
 )
-from something_really_bot.routing.types import BotContext, HandlerResult
+from something_really_bot.routing.help_registry import HelpRegistry
 
 
-class _DummyHandler:
-    def __init__(self, *, name: str, description: str, help_usage: str | None = None) -> None:
-        self.name = name
-        self.description = description
-        self.help_usage = help_usage
-
-    def matches(self, _u: Any, _c: BotContext) -> bool:
-        return False
-
-    async def handle(self, _u: Any, _c: BotContext) -> HandlerResult:
-        return HandlerResult(handled=False)
+def _registry(*entries: FeatureEntry) -> CommandRegistry:
+    return CommandRegistry(list(entries))
 
 
-def test_render_lists_documented_handlers_in_registration_order() -> None:
-    handlers = [
-        _DummyHandler(name="a", description="Greeting.", help_usage="/a"),
-        _DummyHandler(name="b", description="Help body.", help_usage="/b"),
-        _DummyHandler(name="c", description="Send a thing.", help_usage="Upload"),
-        _DummyHandler(name="d", description="Just chat."),  # no usage
-    ]
-    registry = HelpRegistry(lambda: handlers)
+def test_render_lists_entries_in_order() -> None:
+    reg = _registry(
+        FeatureEntry(handler_name="a", description="Greeting.", help_usage="/a"),
+        FeatureEntry(handler_name="b", description="Help body.", help_usage="/b"),
+        FeatureEntry(handler_name="c", description="Send a thing.", help_usage="Upload"),
+        FeatureEntry(handler_name="d", description="Just chat."),
+    )
+    hr = HelpRegistry(reg)
 
-    body = registry.render()
+    body = hr.render()
 
     lines = body.splitlines()
     assert lines[0] == "Here's what I can do:"
@@ -51,56 +32,58 @@ def test_render_lists_documented_handlers_in_registration_order() -> None:
     assert lines[5] == "• Just chat."
 
 
-def test_render_skips_handlers_with_empty_description() -> None:
-    handlers = [
-        _DummyHandler(name="documented", description="visible", help_usage="/d"),
-        _DummyHandler(name="silent", description="", help_usage="/s"),
-    ]
-    registry = HelpRegistry(lambda: handlers)
+def test_render_skips_entries_with_empty_description() -> None:
+    reg = _registry(
+        FeatureEntry(handler_name="visible", description="visible", help_usage="/d"),
+        FeatureEntry(handler_name="silent", description="", help_usage="/s"),
+    )
+    hr = HelpRegistry(reg)
 
-    body = registry.render()
+    body = hr.render()
 
     assert "visible" in body
     assert "silent" not in body
     assert "/s" not in body
 
 
-def test_render_pulls_fresh_handlers_each_call() -> None:
-    """A handler added after construction shows up on the next render."""
-    handlers: list[_DummyHandler] = [
-        _DummyHandler(name="a", description="first", help_usage="/a"),
-    ]
-    registry = HelpRegistry(lambda: handlers)
-
-    before = registry.render()
-    handlers.append(_DummyHandler(name="b", description="second", help_usage="/b"))
-    after = registry.render()
-
-    assert "second" not in before
-    assert "second" in after
-
-
 def test_render_returns_placeholder_when_nothing_documented() -> None:
-    registry = HelpRegistry(lambda: [])
+    hr = HelpRegistry(_registry())
 
-    body = registry.render()
+    body = hr.render()
 
     assert "(no documented features yet)" in body
 
 
-# --------------------------------------------------------------------------- #
-# Production-assembly enforcement: every registered handler has a description.
-# This is the CI gate that closes the loop on #27's acceptance criterion.
-# --------------------------------------------------------------------------- #
+def test_render_custom_header() -> None:
+    reg = _registry(
+        FeatureEntry(handler_name="a", description="Hi.", help_usage="/a"),
+    )
+    hr = HelpRegistry(reg)
+
+    body = hr.render(header="Welcome!")
+
+    assert body.startswith("Welcome!")
 
 
-def test_every_default_handler_has_a_non_empty_description() -> None:
+def test_production_commands_yaml_loads_without_error() -> None:
+    """Smoke-test that the real commands.yaml parses correctly."""
+    registry = get_command_registry()
+    assert len(registry.entries) > 0
+
+
+def test_every_default_handler_has_a_registry_entry() -> None:
+    """Every handler in the production dispatcher must have a corresponding
+    entry in commands.yaml.
+    """
+    from something_really_bot.main import build_default_dispatcher
+
+    registry = get_command_registry()
+    registered_names = {e.handler_name for e in registry.entries}
     dispatcher = build_default_dispatcher()
-    descriptions = collect_descriptions(dispatcher.handlers)
+    handler_names = [h.name for h in dispatcher.handlers]
 
-    missing = [name for name, desc in descriptions.items() if not desc.strip()]
+    missing = [n for n in handler_names if n not in registered_names]
 
     assert not missing, (
-        f"Handlers missing a description (required by #27): {missing}. "
-        "Add `description: str = ...` to the handler class."
+        f"Handlers missing from commands.yaml: {missing}. Add an entry for each handler."
     )

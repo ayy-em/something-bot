@@ -18,7 +18,9 @@ What exists in the repo today:
 - Routing layer (`routing/`): `Dispatcher` class + `Handler` protocol +
   `BotContext` / `HandlerResult` types. First-match-wins; handler
   exceptions are captured, not raised. Multi-bot identifier flows through
-  the context.
+  the context. `CommandRegistry` (`routing/command_registry.py`) loads
+  `commands.yaml` — the single source of truth for feature descriptions,
+  `/help` rendering, and Telegram's `setMyCommands` menu.
 - Telegram parser (`telegram/`): typed Pydantic models, two-level
   discriminated union (chat type → content kind). 14 unsupported update
   types short-circuit to `UnsupportedUpdate`.

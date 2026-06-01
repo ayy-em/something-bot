@@ -1,10 +1,15 @@
-name: Set Telegram webhook
+name: Configure Telegram bot
 
-# Manual-only. Calls Telegram's setWebhook for the chosen bot, pointing at the
-# currently-deployed Cloud Run service. Run this once after the first successful
-# deploy of the /webhook route (#10), and again whenever the URL or webhook
-# secret rotates. Bot token and webhook secret are pulled from Secret Manager at
+# Manual-only. Calls Telegram's setWebhook (pointing at the currently-deployed
+# Cloud Run service) and setMyCommands (registering the autocomplete command
+# menu from commands.yaml). Run this once after the first successful deploy of
+# the /webhook route, and again whenever the URL, webhook secret, or command
+# list changes. Bot token and webhook secret are pulled from Secret Manager at
 # runtime and masked in logs.
+#
+# Note: the ensure-webhook scheduled job also calls setMyCommands every
+# 15 minutes, so the command menu stays in sync automatically. This workflow
+# is the manual override for immediate effect.
 
 on:
   workflow_dispatch:
@@ -24,13 +29,16 @@ env:
   SERVICE_NAME: something-really-bot-cloudrun
 
 jobs:
-  set-webhook:
-    name: Set Telegram webhook
+  configure-bot:
+    name: Configure Telegram bot
     runs-on: ubuntu-latest
     permissions:
       contents: read
       id-token: write
     steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
       - name: Authenticate to GCP via Workload Identity Federation
         uses: google-github-actions/auth@v3
         with:
@@ -96,5 +104,43 @@ jobs:
           ok=$(echo "${response}" | jq -r '.ok')
           if [ "${ok}" != "true" ]; then
             echo "::error::Telegram setWebhook failed: $(echo "${response}" | jq -r '.description // .')" >&2
+            exit 1
+          fi
+
+      - name: Build and call Telegram setMyCommands
+        env:
+          BOT_TOKEN: ${{ steps.secrets.outputs.bot_token }}
+        run: |
+          set -eu
+
+          # Parse commands.yaml: extract entries with show_in_menu: true
+          # and a command field, then build the JSON array for setMyCommands.
+          commands=$(python3 -c "
+          import yaml, json
+          with open('src/something_really_bot/commands.yaml') as f:
+              data = yaml.safe_load(f)
+          cmds = []
+          for entry in data['features']:
+              if entry.get('command') and entry.get('show_in_menu', True):
+                  cmds.append({
+                      'command': entry['command'].lstrip('/'),
+                      'description': entry['description'],
+                  })
+          print(json.dumps(cmds))
+          ")
+
+          echo "Commands to register: ${commands}"
+
+          response=$(curl -sS -X POST \
+            "https://api.telegram.org/bot${BOT_TOKEN}/setMyCommands" \
+            -H "Content-Type: application/json" \
+            -d "{\"commands\": ${commands}}")
+
+          echo "Telegram setMyCommands response:"
+          echo "${response}"
+
+          ok=$(echo "${response}" | jq -r '.ok')
+          if [ "${ok}" != "true" ]; then
+            echo "::error::Telegram setMyCommands failed: $(echo "${response}" | jq -r '.description // .')" >&2
             exit 1
           fi

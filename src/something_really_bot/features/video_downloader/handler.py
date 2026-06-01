@@ -137,8 +137,6 @@ class VideoDownloaderHandler:
     """Telegram dispatcher entry point for the video downloader feature."""
 
     name = "video_downloader.fetch"
-    description = "Send an Instagram Reel or TikTok link — I'll fetch the video."
-    help_usage = "Paste an Instagram Reel / TikTok URL"
 
     def __init__(
         self,

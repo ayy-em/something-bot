@@ -338,6 +338,30 @@ class TelegramClient:
             raise TelegramSendError(f"setMessageReaction not ok: {body.get('description')!r}")
         return body
 
+    async def set_my_commands(
+        self,
+        commands: list[dict[str, str]],
+    ) -> dict[str, Any]:
+        """POST ``setMyCommands`` to register the bot's autocomplete menu.
+
+        Args:
+            commands: List of ``{"command": "...", "description": "..."}``
+                dicts.  The ``command`` value must not include a leading ``/``.
+
+        Returns:
+            The Telegram API result on success.
+
+        Raises:
+            TelegramSendError: Telegram returned ``ok=false``.
+        """
+        url = f"{self._base_url}/bot{self._token.get_secret_value()}/setMyCommands"
+        payload: dict[str, Any] = {"commands": commands}
+        response = await self._request("POST", url, json=payload)
+        body = response.json()
+        if not body.get("ok"):
+            raise TelegramSendError(f"setMyCommands not ok: {body.get('description')!r}")
+        return body.get("result", {})
+
     async def get_webhook_info(self) -> dict[str, Any]:
         """GET ``getWebhookInfo`` and return the ``result`` dict.
 

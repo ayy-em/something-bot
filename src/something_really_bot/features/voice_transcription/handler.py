@@ -125,8 +125,6 @@ class VoiceTranscriptionHandler:
     """Telegram dispatcher entry point for voice transcription."""
 
     name = "voice_transcription.transcribe"
-    description = "Send me a voice memo — I'll reply with a transcript, summary, and emotion read."
-    help_usage = "Record a voice memo (under 10 min)"
 
     def __init__(
         self,

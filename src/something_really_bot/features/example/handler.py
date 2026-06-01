@@ -22,8 +22,6 @@ class PingHandler:
     """Reply ``pong`` to ``/ping`` in private, group, and supergroup chats."""
 
     name = "example.ping"
-    description = "Sanity-check liveness — replies 'pong'."
-    help_usage = "/ping"
 
     def matches(self, update: ParsedUpdate, _ctx: BotContext) -> bool:
         """True for ``/ping`` commands in chat types that have a ``from_user``."""

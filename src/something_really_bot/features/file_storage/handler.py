@@ -31,8 +31,6 @@ class FileStorageHandler:
     """Trigger background file download for private-chat file uploads."""
 
     name = "file_storage.download"
-    description = "Send me a photo or document — I'll save it."
-    help_usage = "Upload a photo/document"
 
     def matches(self, update: ParsedUpdate, _ctx: BotContext) -> bool:
         if not isinstance(update, PrivateMessage):

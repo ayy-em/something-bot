@@ -61,6 +61,7 @@ from something_really_bot.persistence import (
     ResponseRecord,
 )
 from something_really_bot.persistence.bigquery import get_persistence_service
+from something_really_bot.routing.command_registry import get_command_registry
 from something_really_bot.routing.dispatcher import Dispatcher
 from something_really_bot.routing.help_registry import HelpRegistry
 from something_really_bot.routing.types import BotContext, HandlerResult
@@ -103,7 +104,7 @@ def build_default_dispatcher() -> Dispatcher:
     the order the auto-generated ``/help`` (#27) lists features in.
     """
     dispatcher = Dispatcher()
-    help_registry = HelpRegistry(lambda: dispatcher.handlers)
+    help_registry = HelpRegistry(get_command_registry())
     dispatcher.register(StartCommandHandler(help_registry))
     dispatcher.register(HelpCommandHandler(help_registry))
     # /make-sticker (#44), /ocr (#45), and /summarize (#46) must precede

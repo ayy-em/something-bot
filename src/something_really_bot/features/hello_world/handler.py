@@ -26,8 +26,6 @@ class HelloWorldHandler:
     """Parrots back text messages in private chats."""
 
     name = "hello_world.parrot"
-    description = "Parrot mode (only active when HELLO_WORLD_MODE=true)."
-    help_usage = "Send a text message"
 
     def matches(self, update: ParsedUpdate, ctx: BotContext) -> bool:
         if not ctx.settings.hello_world_mode:

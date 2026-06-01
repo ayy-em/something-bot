@@ -31,8 +31,6 @@ class NextReunionHandler:
 
     name = "next_reunion"
     command = "/next-reunion"
-    description = "Set or view the next reunion date."
-    help_usage = "/next-reunion [YYYY-MM-DD]"
 
     def __init__(
         self,

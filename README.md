@@ -80,7 +80,7 @@ Three GitHub Actions workflows live under `.github/workflows/`:
 | --- | --- | --- |
 | `ci.yml` | PR to `master` | Runs `ruff format --check`, `ruff check`, `pytest`, `terraform fmt -check`, `terraform validate` via the reusable `_checks.yml`. |
 | `deploy.yml` | Push to `master` (markdown/docs paths ignored) | Re-runs the checks, then builds the Docker image, pushes both `${{ github.sha }}` and `latest` tags to Artifact Registry, then `gcloud run deploy` to Cloud Run. Auth via OIDC / Workload Identity Federation only. |
-| `set-telegram-webhook.yml` | `workflow_dispatch` only | Manually points the chosen bot's Telegram webhook at the currently-deployed Cloud Run service. Bot token + webhook secret read from Secret Manager at runtime and masked. |
+| `configure-telegram-bot.yml` | `workflow_dispatch` only | Manually sets the Telegram webhook and syncs the autocomplete command menu (`setMyCommands`) from `commands.yaml`. Bot token + webhook secret read from Secret Manager at runtime and masked. |
 | `daily-weather-qa.yml` | `workflow_dispatch` only | Triggers the `daily-message-qa` job to send the daily message as a DM to JM for QA. Authenticates via WIF as the deployer SA. |
 
 ### Required GitHub repo secrets
@@ -99,9 +99,22 @@ Before the first deploy can succeed, you need to have already done the steps bel
 1. Apply the Terraform from `infra/terraform/` (see [`infra/terraform/README.md`](./infra/terraform/README.md) for the bootstrap commands).
 2. Read the two outputs above and set them as repo secrets in GitHub.
 3. Push to `master` (or merge a PR) to trigger the first deploy.
-4. Once Cloud Run reports the new image deployed, run the `Set Telegram webhook` workflow from the Actions tab.
+4. Once Cloud Run reports the new image deployed, run the `Configure Telegram bot` workflow from the Actions tab (sets the webhook and syncs the command menu).
 
 ## Bot features
+
+All bot features — commands, passive handlers, descriptions, and Telegram menu visibility — are defined in a single YAML registry:
+
+```
+src/something_really_bot/commands.yaml
+```
+
+This file is the source of truth for:
+- `/help` and `/start` rendering (via `HelpRegistry`)
+- Telegram's autocomplete command menu (`setMyCommands`, synced by the `ensure-webhook` job every 15 min)
+- The `Configure Telegram bot` GitHub Actions workflow
+
+To add, remove, or reorder features, edit `commands.yaml`. A CI test enforces every registered handler has a corresponding entry. Set `show_in_menu: false` on a command to keep it functional but hidden from Telegram's autocomplete.
 
 ### Commands (DM / group)
 

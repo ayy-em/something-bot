@@ -1,0 +1,84 @@
+# Bot feature registry.
+#
+# Single source of truth for all bot features. Consumed by:
+# - /help and /start rendering (help_registry.py)
+# - Telegram setMyCommands autocomplete menu (ensure_webhook job)
+#
+# Order determines display order in /help.
+#
+# Fields:
+#   handler_name  — must match the handler's `name` attribute (required)
+#   description   — shown in /help and Telegram menu (required)
+#   help_usage    — left-hand label in /help bullets (optional)
+#   command       — the /command string, if this is a slash-command (optional)
+#   show_in_menu  — include in Telegram's autocomplete menu (default: true,
+#                   only applies to entries with a command)
+
+features:
+  - handler_name: commands.start
+    command: /start
+    description: "Greeting + intro with the full feature list."
+    help_usage: /start
+    show_in_menu: true
+
+  - handler_name: commands.help
+    command: /help
+    description: "Show this help message."
+    help_usage: /help
+    show_in_menu: true
+
+  - handler_name: make_sticker
+    command: /make-sticker
+    description: "Convert an image into a Telegram sticker-ready PNG."
+    help_usage: "/make-sticker, then send a photo"
+    show_in_menu: true
+
+  - handler_name: ocr
+    command: /ocr
+    description: "Extract text from an image."
+    help_usage: "/ocr, then send a photo"
+    show_in_menu: true
+
+  - handler_name: summarize
+    command: /summarize
+    description: "Get a TL;DR of a PDF, DOCX, TXT, or Markdown file."
+    help_usage: "/summarize, then send a file"
+    show_in_menu: true
+
+  - handler_name: file_storage.download
+    description: "Send me a photo or document — I'll save it."
+    help_usage: "Upload a photo/document"
+
+  - handler_name: voice_transcription.transcribe
+    description: "Send me a voice memo — I'll reply with a transcript, summary, and emotion read."
+    help_usage: "Record a voice memo (under 10 min)"
+
+  - handler_name: next_reunion
+    command: /next-reunion
+    description: "Set or view the next reunion date."
+    help_usage: "/next-reunion [YYYY-MM-DD]"
+    show_in_menu: false
+
+  - handler_name: dutch_translation
+    command: /dutch
+    description: "Translate Dutch text into English."
+    help_usage: "/dutch [text] or send /dutch, then the text"
+    show_in_menu: true
+
+  - handler_name: video_downloader.fetch
+    description: "Send an Instagram Reel or TikTok link — I'll fetch the video."
+    help_usage: "Paste an Instagram Reel / TikTok URL"
+
+  - handler_name: hello_world.parrot
+    description: "Parrot mode (only active when HELLO_WORLD_MODE=true)."
+    help_usage: "Send a text message"
+
+  - handler_name: openai_fallback
+    description: "Chat with me — I'll reply via OpenAI."
+    help_usage: "Send any text message"
+
+  - handler_name: example.ping
+    command: /ping
+    description: "Sanity-check liveness — send this, and I should reply with 'pong' (if my creator didn't fuck it up)."
+    help_usage: /ping
+    show_in_menu: true

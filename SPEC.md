@@ -285,6 +285,28 @@ The exact wording is not important. The command routing structure is important.
 * Both commands return deterministic placeholder responses.
 * Command handling is covered by tests.
 
+### 6.6.1 Command Registry (`commands.yaml`)
+
+All bot features are registered in `src/something_really_bot/commands.yaml`.
+This YAML file is the single source of truth for feature names,
+descriptions, help text, and Telegram menu visibility. It is consumed by:
+
+* `/help` and `/start` rendering — `routing/help_registry.py` reads the
+  YAML via `CommandRegistry` and renders one bullet per entry.
+* Telegram `setMyCommands` — the `ensure-webhook` scheduled job syncs the
+  autocomplete command menu every 15 minutes. Only entries with a
+  `command` field and `show_in_menu: true` are included.
+* The `Configure Telegram bot` GitHub Actions workflow — manual override
+  that reads the same YAML and calls `setMyCommands` directly.
+
+Each entry carries: `handler_name` (must match the handler's `name`
+attribute), `description`, optional `help_usage`, optional `command`,
+and optional `show_in_menu` (defaults to `true`). Display order in
+`/help` follows YAML order.
+
+A CI test enforces that every handler registered in the production
+dispatcher has a corresponding entry in `commands.yaml`.
+
 ---
 
 ## 6.7 File Handling

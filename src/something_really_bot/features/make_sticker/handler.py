@@ -77,8 +77,6 @@ class MakeStickerHandler:
     """``/make-sticker`` command + follow-up photo routing."""
 
     name = "make_sticker"
-    description = "/make-sticker — convert an image into a Telegram sticker-ready PNG."
-    help_usage = "/make-sticker, then send a photo"
 
     def __init__(
         self,

@@ -80,8 +80,6 @@ class OCRHandler:
     """``/ocr`` command + follow-up photo routing."""
 
     name = "ocr"
-    description = "/ocr — extract text from an image."
-    help_usage = "/ocr, then send a photo"
 
     def __init__(
         self,

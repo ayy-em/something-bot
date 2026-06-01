@@ -94,8 +94,6 @@ class SummarizeHandler:
     """``/summarize`` command + follow-up document routing."""
 
     name = "summarize"
-    description = "/summarize — get a TL;DR of a PDF, DOCX, TXT, or Markdown file."
-    help_usage = "/summarize, then send a file"
 
     def __init__(
         self,

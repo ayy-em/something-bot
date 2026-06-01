@@ -13,6 +13,7 @@ from something_really_bot.features.commands.handler import (
     HelpCommandHandler,
     StartCommandHandler,
 )
+from something_really_bot.routing.command_registry import CommandRegistry, FeatureEntry
 from something_really_bot.routing.help_registry import HelpRegistry
 from something_really_bot.routing.types import BotContext
 from something_really_bot.telegram.models import (
@@ -73,12 +74,12 @@ def _supergroup_command(command: str) -> SupergroupMessage:
 
 
 async def test_start_handler_renders_welcome_with_feature_list() -> None:
-    class _FakeHandler:
-        name = "fake"
-        description = "Do a fake thing."
-        help_usage = "/fake"
-
-    registry = HelpRegistry(lambda: (_FakeHandler(),))
+    cmd_reg = CommandRegistry(
+        [
+            FeatureEntry(handler_name="fake", description="Do a fake thing.", help_usage="/fake"),
+        ]
+    )
+    registry = HelpRegistry(cmd_reg)
     handler = StartCommandHandler(registry)
 
     result = await handler.handle(_private_command("/start"), _ctx())

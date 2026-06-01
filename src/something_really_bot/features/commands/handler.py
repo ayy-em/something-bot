@@ -10,13 +10,13 @@ Telegram's ``@bot_name`` suffix from the ``command`` field, so matching
 arrive here as ``command="/start"``.
 
 Both ``/start`` and ``/help`` render their feature list from
-:class:`HelpRegistry`, which walks the dispatcher's registered handlers
-and prints one bullet per handler with a non-empty ``description``.
-``/start`` adds a welcome header; ``/help`` uses the registry's default
-header. Either way, a new feature lands in both commands automatically
-once its handler is registered.
+:class:`HelpRegistry`, which reads ``commands.yaml`` via the
+:class:`CommandRegistry`. ``/start`` adds a welcome header; ``/help``
+uses the default header.  Adding a new feature to ``commands.yaml``
+surfaces it in both commands automatically.
 """
 
+from something_really_bot.routing.command_registry import CommandRegistry
 from something_really_bot.routing.help_registry import HelpRegistry
 from something_really_bot.routing.types import BotContext, HandlerResult
 from something_really_bot.telegram.models import (
@@ -33,8 +33,6 @@ class _CommandHandlerBase:
 
     name: str
     command: str
-    description: str = ""
-    help_usage: str | None = None
 
     def matches(self, update: ParsedUpdate, _ctx: BotContext) -> bool:
         if not isinstance(update, PrivateMessage):
@@ -49,11 +47,9 @@ class StartCommandHandler(_CommandHandlerBase):
 
     name = "commands.start"
     command = "/start"
-    description = "Greeting + intro with the full feature list."
-    help_usage = "/start"
 
     def __init__(self, registry: HelpRegistry | None = None) -> None:
-        self._registry = registry or HelpRegistry(lambda: ())
+        self._registry = registry or HelpRegistry(CommandRegistry([]))
 
     async def handle(self, _update: ParsedUpdate, _ctx: BotContext) -> HandlerResult:
         body = self._registry.render(header=START_HEADER)
@@ -65,11 +61,9 @@ class HelpCommandHandler(_CommandHandlerBase):
 
     name = "commands.help"
     command = "/help"
-    description = "Show this help message."
-    help_usage = "/help"
 
     def __init__(self, registry: HelpRegistry | None = None) -> None:
-        self._registry = registry or HelpRegistry(lambda: ())
+        self._registry = registry or HelpRegistry(CommandRegistry([]))
 
     async def handle(self, _update: ParsedUpdate, _ctx: BotContext) -> HandlerResult:
         return HandlerResult(
