@@ -103,3 +103,59 @@ def test_production_help_has_two_sections() -> None:
 
     assert "Commands:" in body
     assert "Apart from commands" in body
+
+
+def test_gated_commands_hidden_from_untrusted_user() -> None:
+    reg = _registry(
+        FeatureEntry(handler_name="open", description="Open.", command="/o", help_usage="/o"),
+        FeatureEntry(
+            handler_name="secret",
+            description="Secret.",
+            command="/s",
+            help_usage="/s",
+            trusted_users_only=True,
+        ),
+    )
+    hr = HelpRegistry(reg)
+
+    body = hr.render(user_id=999, trusted_user_ids=frozenset({42}))
+
+    assert "Open." in body
+    assert "Secret." not in body
+
+
+def test_gated_commands_visible_to_trusted_user() -> None:
+    reg = _registry(
+        FeatureEntry(handler_name="open", description="Open.", command="/o", help_usage="/o"),
+        FeatureEntry(
+            handler_name="secret",
+            description="Secret.",
+            command="/s",
+            help_usage="/s",
+            trusted_users_only=True,
+        ),
+    )
+    hr = HelpRegistry(reg)
+
+    body = hr.render(user_id=42, trusted_user_ids=frozenset({42}))
+
+    assert "Open." in body
+    assert "Secret." in body
+
+
+def test_gated_commands_visible_when_no_user_context() -> None:
+    """Without user context (e.g. tests), gated entries show by default."""
+    reg = _registry(
+        FeatureEntry(
+            handler_name="secret",
+            description="Secret.",
+            command="/s",
+            help_usage="/s",
+            trusted_users_only=True,
+        ),
+    )
+    hr = HelpRegistry(reg)
+
+    body = hr.render()
+
+    assert "Secret." not in body

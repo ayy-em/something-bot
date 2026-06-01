@@ -51,8 +51,13 @@ class StartCommandHandler(_CommandHandlerBase):
     def __init__(self, registry: HelpRegistry | None = None) -> None:
         self._registry = registry or HelpRegistry(CommandRegistry([]))
 
-    async def handle(self, _update: ParsedUpdate, _ctx: BotContext) -> HandlerResult:
-        body = self._registry.render(header=START_HEADER)
+    async def handle(self, update: ParsedUpdate, ctx: BotContext) -> HandlerResult:
+        assert isinstance(update, PrivateMessage)
+        body = self._registry.render(
+            header=START_HEADER,
+            user_id=update.from_user.id,
+            trusted_user_ids=ctx.settings.telegram_qa_user_ids,
+        )
         return HandlerResult(handled=True, handler_name=self.name, reply_text=body)
 
 
@@ -65,9 +70,13 @@ class HelpCommandHandler(_CommandHandlerBase):
     def __init__(self, registry: HelpRegistry | None = None) -> None:
         self._registry = registry or HelpRegistry(CommandRegistry([]))
 
-    async def handle(self, _update: ParsedUpdate, _ctx: BotContext) -> HandlerResult:
+    async def handle(self, update: ParsedUpdate, ctx: BotContext) -> HandlerResult:
+        assert isinstance(update, PrivateMessage)
         return HandlerResult(
             handled=True,
             handler_name=self.name,
-            reply_text=self._registry.render(),
+            reply_text=self._registry.render(
+                user_id=update.from_user.id,
+                trusted_user_ids=ctx.settings.telegram_qa_user_ids,
+            ),
         )
