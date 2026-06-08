@@ -87,6 +87,10 @@ async def _reunion_fetcher() -> date | None:
     return date(2026, 6, 7)
 
 
+async def _no_duration_fetcher() -> int | None:
+    return None
+
+
 # ---- Website stats fixtures -------------------------------------------------
 
 SITE_A = SiteConfig(
@@ -189,7 +193,10 @@ class _RecordingPersistence:
 def _default_sections() -> list[Section]:
     return [
         WeatherSection(weather_fetcher=_weather_fetcher),
-        ReunionSection(reunion_fetcher=_reunion_fetcher),
+        ReunionSection(
+            reunion_fetcher=_reunion_fetcher,
+            duration_fetcher=_no_duration_fetcher,
+        ),
         FxRateSection(rate_fetcher=_rate_fetcher),
         OnThisDaySection(otd_fetcher=_otd_fetcher),
     ]
@@ -266,7 +273,7 @@ async def test_run_omits_weather_section_for_failed_city() -> None:
     tg = _FakeTelegramClient()
     sections: list[Section] = [
         WeatherSection(weather_fetcher=_partial_weather),
-        ReunionSection(reunion_fetcher=_reunion_fetcher),
+        ReunionSection(reunion_fetcher=_reunion_fetcher, duration_fetcher=_no_duration_fetcher),
     ]
     schedule = _everyday_schedule("weather", "reunion")
     job = DailyMessageJob(sections=sections, schedule=schedule, now=_fixed_now)
@@ -323,7 +330,7 @@ async def test_run_shows_not_yet_known_when_reunion_not_set() -> None:
     tg = _FakeTelegramClient()
     sections: list[Section] = [
         WeatherSection(weather_fetcher=_weather_fetcher),
-        ReunionSection(reunion_fetcher=_no_reunion),
+        ReunionSection(reunion_fetcher=_no_reunion, duration_fetcher=_no_duration_fetcher),
     ]
     schedule = _everyday_schedule("weather", "reunion")
     job = DailyMessageJob(sections=sections, schedule=schedule, now=_fixed_now)
@@ -342,7 +349,7 @@ async def test_run_omits_reunion_section_when_past() -> None:
     tg = _FakeTelegramClient()
     sections: list[Section] = [
         WeatherSection(weather_fetcher=_weather_fetcher),
-        ReunionSection(reunion_fetcher=_past_reunion),
+        ReunionSection(reunion_fetcher=_past_reunion, duration_fetcher=_no_duration_fetcher),
     ]
     schedule = _everyday_schedule("weather", "reunion")
     job = DailyMessageJob(sections=sections, schedule=schedule, now=_fixed_now)
@@ -370,7 +377,7 @@ async def test_run_sends_no_data_when_all_sources_fail() -> None:
     persistence = _RecordingPersistence()
     sections: list[Section] = [
         WeatherSection(weather_fetcher=_bad_weather),
-        ReunionSection(reunion_fetcher=_bad_reunion),
+        ReunionSection(reunion_fetcher=_bad_reunion, duration_fetcher=_no_duration_fetcher),
         FxRateSection(rate_fetcher=_bad_rate),
         OnThisDaySection(otd_fetcher=_bad_otd),
     ]
@@ -477,7 +484,7 @@ async def test_run_shows_milestone_at_seven_days() -> None:
     tg = _FakeTelegramClient()
     schedule = _everyday_schedule("reunion")
     job = DailyMessageJob(
-        sections=[ReunionSection(reunion_fetcher=_seven_day_reunion)],
+        sections=[ReunionSection(reunion_fetcher=_seven_day_reunion, duration_fetcher=_no_duration_fetcher)],
         schedule=schedule,
         now=_fixed_now,
     )
@@ -495,7 +502,7 @@ async def test_run_shows_today_milestone() -> None:
     tg = _FakeTelegramClient()
     schedule = _everyday_schedule("reunion")
     job = DailyMessageJob(
-        sections=[ReunionSection(reunion_fetcher=_today_reunion)],
+        sections=[ReunionSection(reunion_fetcher=_today_reunion, duration_fetcher=_no_duration_fetcher)],
         schedule=schedule,
         now=_fixed_now,
     )
@@ -762,3 +769,159 @@ async def test_composer_empty_schedule() -> None:
     composer = DailyMessageComposer(sections=_default_sections(), schedule=schedule)
     text = await composer.compose(date(2026, 5, 25))
     assert "No data available today\\." in text
+
+
+# =============================================================================
+# Reunion duration (#60)
+# =============================================================================
+
+
+async def test_run_shows_enjoying_message_during_reunion() -> None:
+    """Day 0 of a reunion with duration set shows 'enjoying' message."""
+
+    async def _today_reunion() -> date | None:
+        return date(2026, 5, 25)
+
+    async def _duration() -> int | None:
+        return 5
+
+    tg = _FakeTelegramClient()
+    schedule = _everyday_schedule("reunion")
+    job = DailyMessageJob(
+        sections=[
+            ReunionSection(reunion_fetcher=_today_reunion, duration_fetcher=_duration),
+        ],
+        schedule=schedule,
+        now=_fixed_now,
+    )
+
+    await job.run(_ctx(telegram_client=tg))
+
+    text = tg.sends[0]["text"]
+    assert "enjoying time together" in text
+
+
+async def test_run_shows_enjoying_mid_reunion() -> None:
+    """Day 2 of a 5-day reunion shows 'enjoying' message."""
+
+    async def _started_reunion() -> date | None:
+        return date(2026, 5, 23)
+
+    async def _duration() -> int | None:
+        return 5
+
+    tg = _FakeTelegramClient()
+    schedule = _everyday_schedule("reunion")
+    job = DailyMessageJob(
+        sections=[
+            ReunionSection(reunion_fetcher=_started_reunion, duration_fetcher=_duration),
+        ],
+        schedule=schedule,
+        now=_fixed_now,
+    )
+
+    await job.run(_ctx(telegram_client=tg))
+
+    text = tg.sends[0]["text"]
+    assert "enjoying time together" in text
+
+
+async def test_run_shows_not_yet_known_after_reunion_duration_expires() -> None:
+    """After reunion + duration has passed, shows 'not yet known'."""
+
+    async def _past_reunion() -> date | None:
+        return date(2026, 5, 20)
+
+    async def _duration() -> int | None:
+        return 3
+
+    tg = _FakeTelegramClient()
+    schedule = _everyday_schedule("reunion")
+    job = DailyMessageJob(
+        sections=[
+            ReunionSection(reunion_fetcher=_past_reunion, duration_fetcher=_duration),
+        ],
+        schedule=schedule,
+        now=_fixed_now,
+    )
+
+    await job.run(_ctx(telegram_client=tg))
+
+    text = tg.sends[0]["text"]
+    assert "not yet known" in text
+
+
+async def test_run_shows_countdown_before_reunion_with_duration() -> None:
+    """Before the reunion starts, normal countdown is shown even with duration set."""
+
+    async def _future_reunion() -> date | None:
+        return date(2026, 6, 7)
+
+    async def _duration() -> int | None:
+        return 5
+
+    tg = _FakeTelegramClient()
+    schedule = _everyday_schedule("reunion")
+    job = DailyMessageJob(
+        sections=[
+            ReunionSection(reunion_fetcher=_future_reunion, duration_fetcher=_duration),
+        ],
+        schedule=schedule,
+        now=_fixed_now,
+    )
+
+    await job.run(_ctx(telegram_client=tg))
+
+    text = tg.sends[0]["text"]
+    assert "13 days" in text
+    assert "enjoying" not in text
+
+
+async def test_run_shows_enjoying_on_last_day_of_reunion() -> None:
+    """The last day of reunion (target + duration - 1) still shows 'enjoying'."""
+
+    async def _reunion_start() -> date | None:
+        return date(2026, 5, 22)
+
+    async def _duration() -> int | None:
+        return 4
+
+    tg = _FakeTelegramClient()
+    schedule = _everyday_schedule("reunion")
+    job = DailyMessageJob(
+        sections=[
+            ReunionSection(reunion_fetcher=_reunion_start, duration_fetcher=_duration),
+        ],
+        schedule=schedule,
+        now=_fixed_now,
+    )
+
+    await job.run(_ctx(telegram_client=tg))
+
+    text = tg.sends[0]["text"]
+    assert "enjoying time together" in text
+
+
+async def test_run_duration_fetcher_failure_falls_back_to_no_duration() -> None:
+    """If duration fetch fails, behave as if no duration is set."""
+
+    async def _future_reunion() -> date | None:
+        return date(2026, 6, 7)
+
+    async def _bad_duration() -> int | None:
+        raise RuntimeError("PG down")
+
+    tg = _FakeTelegramClient()
+    schedule = _everyday_schedule("reunion")
+    job = DailyMessageJob(
+        sections=[
+            ReunionSection(reunion_fetcher=_future_reunion, duration_fetcher=_bad_duration),
+        ],
+        schedule=schedule,
+        now=_fixed_now,
+    )
+
+    await job.run(_ctx(telegram_client=tg))
+
+    text = tg.sends[0]["text"]
+    assert "13 days" in text

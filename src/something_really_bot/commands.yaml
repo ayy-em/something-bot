@@ -61,6 +61,13 @@ features:
     show_in_menu: false
     trusted_users_only: true
 
+  - handler_name: next_reunion_duration
+    command: /next_reunion_duration
+    description: "Set or view how many days the next reunion lasts."
+    help_usage: /next_reunion_duration
+    show_in_menu: false
+    trusted_users_only: true
+
   - handler_name: example.ping
     command: /ping
     description: "I'll reply with `pong` (if my creator didn't fuck it up)."

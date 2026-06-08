@@ -42,6 +42,7 @@ from something_really_bot.features.hello_world.handler import HelloWorldHandler
 from something_really_bot.features.make_sticker.handler import (
     get_make_sticker_handler,
 )
+from something_really_bot.features.next_reunion.duration_handler import NextReunionDurationHandler
 from something_really_bot.features.next_reunion.handler import NextReunionHandler
 from something_really_bot.features.ocr.handler import get_ocr_handler
 from something_really_bot.features.openai_fallback.handler import OpenAIFallbackHandler
@@ -125,6 +126,8 @@ def build_default_dispatcher() -> Dispatcher:
     dispatcher.register(get_voice_transcription_handler())
     # /next-reunion sets or queries the reunion countdown date (#58).
     dispatcher.register(NextReunionHandler())
+    # /next-reunion-duration sets or queries reunion duration in days (#60).
+    dispatcher.register(NextReunionDurationHandler())
     # Command-driven workflows: /dutch claims its trigger + follow-up
     # text replies via pending_action state (#47).
     dispatcher.register(get_dutch_translation_handler())
