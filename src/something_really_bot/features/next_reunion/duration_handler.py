@@ -80,7 +80,9 @@ class NextReunionDurationHandler:
             return HandlerResult(
                 handled=True,
                 handler_name=self.name,
-                reply_text=f"Invalid duration: {raw}\nPlease provide a positive whole number of days.",
+                reply_text=(
+                    f"Invalid duration: {raw}\nPlease provide a positive whole number of days."
+                ),
             )
 
         if days < 1:
@@ -148,7 +150,9 @@ class NextReunionDurationHandler:
             return HandlerResult(
                 handled=True,
                 handler_name=self.name,
-                reply_text="No reunion duration is set. Use /next_reunion_duration <days> to set one.",
+                reply_text=(
+                    "No reunion duration is set. Use /next_reunion_duration <days> to set one."
+                ),
             )
 
         reply = f"Current reunion duration: {duration} day{'s' if duration != 1 else ''}."
