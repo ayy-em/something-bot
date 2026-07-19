@@ -14,7 +14,10 @@ from pydantic import SecretStr
 
 from something_really_bot.config import Settings
 from something_really_bot.features.voice_transcription.handler import (
+    TELEGRAM_MESSAGE_LIMIT,
     VoiceTranscriptionHandler,
+    _chunk_transcript,
+    _compose_reply_messages,
 )
 from something_really_bot.features.voice_transcription.transcriber import (
     Analysis,
@@ -207,9 +210,9 @@ class _FakeJobStorage:
     async def mark_succeeded(self, job_id, **kwargs):
         self.succeeded.append({"id": job_id, **kwargs})
 
-    async def mark_failed(self, job_id, *, error_class, error_message):
+    async def mark_failed(self, job_id, *, error_class, error_message, **kwargs):
         self.failed.append(
-            {"id": job_id, "error_class": error_class, "error_message": error_message}
+            {"id": job_id, "error_class": error_class, "error_message": error_message, **kwargs}
         )
 
 
@@ -267,7 +270,7 @@ def test_does_not_match_text() -> None:
 
 
 async def test_happy_path_long_memo_private() -> None:
-    """> 60s memo: analyze runs, long template, edits the ack in place."""
+    """> 120s memo: analyze runs, long template, edits the ack in place."""
     telegram = _FakeTelegram()
     gcs = _FakeGCS()
     transcriber = _FakeTranscriber()
@@ -282,7 +285,7 @@ async def test_happy_path_long_memo_private() -> None:
         scheduler=lambda c: scheduled.append(c),
     )
 
-    await handler.handle(_private_voice_msg(voice=_voice(duration=90)), _ctx(persistence))
+    await handler.handle(_private_voice_msg(voice=_voice(duration=150)), _ctx(persistence))
 
     # Ack happened synchronously, background queued.
     assert len(telegram.sent_messages) == 1
@@ -343,7 +346,7 @@ async def test_happy_path_long_memo_private() -> None:
 
 
 async def test_happy_path_short_memo_skips_analyze_and_uses_short_template() -> None:
-    """≤ 60s memo: analyze does NOT run, short template, ack edited."""
+    """≤ 120s memo: analyze does NOT run, short template, ack edited."""
     telegram = _FakeTelegram()
     transcriber = _FakeTranscriber()
     jobs = _FakeJobStorage()
@@ -381,8 +384,8 @@ async def test_happy_path_short_memo_skips_analyze_and_uses_short_template() -> 
     assert jobs.succeeded[0]["emotion"] is None
 
 
-async def test_boundary_exactly_60s_uses_short_template() -> None:
-    """Threshold is ``duration > 60`` — 60s exactly stays on the short path."""
+async def test_boundary_exactly_120s_uses_short_template() -> None:
+    """Threshold is ``duration > 120`` — 120s exactly stays on the short path."""
     telegram = _FakeTelegram()
     transcriber = _FakeTranscriber()
     scheduled: list[Any] = []
@@ -393,7 +396,7 @@ async def test_boundary_exactly_60s_uses_short_template() -> None:
         scheduler=lambda c: scheduled.append(c),
     )
 
-    await handler.handle(_private_voice_msg(voice=_voice(duration=60)), _ctx())
+    await handler.handle(_private_voice_msg(voice=_voice(duration=120)), _ctx())
     await scheduled[0]
 
     assert transcriber.analyses == []
@@ -434,7 +437,7 @@ async def test_happy_path_group_uses_group_chat_id() -> None:
         scheduler=lambda c: scheduled.append(c),
     )
 
-    await handler.handle(_group_voice_msg(voice=_voice(duration=90)), _ctx())
+    await handler.handle(_group_voice_msg(voice=_voice(duration=150)), _ctx())
     await scheduled[0]
 
     assert telegram.sent_messages[0]["chat_id"] == -1001
@@ -553,8 +556,8 @@ async def test_analysis_failure_replies_user_error() -> None:
         scheduler=lambda c: scheduled.append(c),
     )
 
-    # Analysis only runs for long memos — use 90s.
-    await handler.handle(_private_voice_msg(voice=_voice(duration=90)), _ctx())
+    # Analysis only runs for long memos — use 150s.
+    await handler.handle(_private_voice_msg(voice=_voice(duration=150)), _ctx())
     await scheduled[0]
 
     assert "summarize" in telegram.edited_messages[0]["text"].lower()
@@ -602,3 +605,172 @@ async def test_ack_failure_is_swallowed() -> None:
 
     # Every send_message call raised, so nothing got recorded.
     assert telegram.sent_messages == []
+
+
+# --- Splitting tests ---
+
+
+def test_compose_reply_messages_short_transcript_single_message() -> None:
+    """Transcript that fits in one message returns a single-element list."""
+    msgs = _compose_reply_messages("Short text.", None, None)
+    assert len(msgs) == 1
+    assert msgs[0] == "Voice-to-text:\n<blockquote>Short text.</blockquote>"
+
+
+def test_compose_reply_messages_long_transcript_with_summary_splits() -> None:
+    """Long transcript with summary splits into header + numbered chunks."""
+    transcript = "word " * 1500  # ~7500 chars
+    msgs = _compose_reply_messages(transcript.strip(), "A brief summary.", "Speaker sounds calm.")
+    assert len(msgs) > 2
+    assert "Summary & Vibe:" in msgs[0]
+    assert "A brief summary." in msgs[0]
+    assert "Speaker sounds calm." in msgs[0]
+    assert "will be split into" in msgs[0]
+
+    for msg in msgs:
+        assert len(msg) <= TELEGRAM_MESSAGE_LIMIT
+
+    assert msgs[-1].endswith("\nEnd of transcript")
+
+    for i, msg in enumerate(msgs[1:], start=1):
+        assert msg.startswith(f"Transcript pt. {i} of {len(msgs) - 1}:")
+
+
+def test_compose_reply_messages_long_transcript_without_summary_splits() -> None:
+    """Long transcript without summary: first message is just the notice."""
+    transcript = "word " * 1500
+    msgs = _compose_reply_messages(transcript.strip(), None, None)
+    assert len(msgs) > 2
+    assert "Summary & Vibe:" not in msgs[0]
+    assert "will be split into" in msgs[0]
+    assert msgs[-1].endswith("\nEnd of transcript")
+
+    for msg in msgs:
+        assert len(msg) <= TELEGRAM_MESSAGE_LIMIT
+
+
+def test_compose_reply_messages_preserves_full_transcript() -> None:
+    """Concatenated chunks reconstruct the full escaped transcript."""
+    transcript = "Hello & welcome! " * 400
+    msgs = _compose_reply_messages(transcript.strip(), None, None)
+    chunks = []
+    for msg in msgs[1:]:
+        start = msg.index("<blockquote>") + len("<blockquote>")
+        end = msg.index("</blockquote>")
+        chunks.append(msg[start:end])
+    joined = " ".join(c.strip() for c in chunks if c.strip())
+    expected = "Hello &amp; welcome! " * 399 + "Hello &amp; welcome!"
+    assert joined == expected
+
+
+def test_chunk_transcript_does_not_split_html_entity() -> None:
+    """A chunk boundary must not land inside an HTML entity like &amp;."""
+    text = "x" * 95 + "&amp;" + "y" * 10
+    chunks = _chunk_transcript(text, max_chunk_size=98)
+    for chunk in chunks:
+        assert "&" not in chunk or "&amp;" in chunk or chunk.endswith("&") is False
+    assert "&amp;" in "".join(chunks)
+
+
+def test_chunk_transcript_prefers_whitespace() -> None:
+    """Chunks split at spaces/newlines rather than mid-word."""
+    text = "aaa bbb ccc ddd eee fff"
+    chunks = _chunk_transcript(text, max_chunk_size=12)
+    for chunk in chunks:
+        assert not chunk.startswith(" ")
+
+
+async def test_long_transcript_edits_ack_then_sends_chunks() -> None:
+    """Multi-message reply: first message edits ack, rest are fresh sends."""
+    telegram = _FakeTelegram()
+    transcriber = _FakeTranscriber(transcribe_return="word " * 1500)
+    jobs = _FakeJobStorage()
+    scheduled: list[Any] = []
+    handler = _build_handler(
+        telegram=telegram,
+        gcs=_FakeGCS(),
+        transcriber=transcriber,
+        jobs=jobs,
+        scheduler=lambda c: scheduled.append(c),
+    )
+
+    await handler.handle(_private_voice_msg(voice=_voice(duration=30)), _ctx())
+    await scheduled[0]
+
+    assert len(telegram.edited_messages) == 1
+    assert "will be split into" in telegram.edited_messages[0]["text"]
+
+    chunk_sends = [m for m in telegram.sent_messages[1:] if "Transcript pt." in m["text"]]
+    assert len(chunk_sends) >= 2
+    assert chunk_sends[-1]["text"].endswith("\nEnd of transcript")
+
+    for msg in chunk_sends:
+        assert len(msg["text"]) <= TELEGRAM_MESSAGE_LIMIT
+        assert msg["parse_mode"] == "HTML"
+
+    assert len(jobs.succeeded) == 1
+
+
+# --- Partial persistence tests ---
+
+
+async def test_analysis_failure_persists_transcript_in_mark_failed() -> None:
+    """When analysis fails, transcript is still saved in the failed job row."""
+    telegram = _FakeTelegram()
+    transcriber = _FakeTranscriber(analyze_raises=AnalysisError("bad json"))
+    jobs = _FakeJobStorage()
+    scheduled: list[Any] = []
+    handler = _build_handler(
+        telegram=telegram,
+        gcs=_FakeGCS(),
+        transcriber=transcriber,
+        jobs=jobs,
+        scheduler=lambda c: scheduled.append(c),
+    )
+
+    await handler.handle(_private_voice_msg(voice=_voice(duration=150)), _ctx())
+    await scheduled[0]
+
+    assert len(jobs.failed) == 1
+    assert jobs.failed[0]["error_class"] == "AnalysisError"
+    assert jobs.failed[0]["transcript"] == "Hello there."
+    assert jobs.failed[0]["summary"] is None
+    assert jobs.failed[0]["emotion"] is None
+
+
+async def test_send_failure_persists_all_partial_results() -> None:
+    """When sending fails, transcript + summary + emotion are preserved."""
+    telegram = _FakeTelegram(
+        edit_message_raises=TelegramSendError("edit fail"),
+    )
+    transcriber = _FakeTranscriber()
+    jobs = _FakeJobStorage()
+    scheduled: list[Any] = []
+    handler = _build_handler(
+        telegram=telegram,
+        gcs=_FakeGCS(),
+        transcriber=transcriber,
+        jobs=jobs,
+        scheduler=lambda c: scheduled.append(c),
+    )
+
+    send_count = 0
+    original_send = telegram.send_message
+
+    async def _send_then_fail(*args, **kwargs):
+        nonlocal send_count
+        send_count += 1
+        if send_count == 1:
+            return await original_send(*args, **kwargs)
+        raise TelegramSendError("send fail")
+
+    telegram.send_message = _send_then_fail  # type: ignore[assignment]
+
+    await handler.handle(_private_voice_msg(voice=_voice(duration=150)), _ctx())
+    await scheduled[0]
+
+    assert len(jobs.failed) == 1
+    assert jobs.failed[0]["transcript"] == "Hello there."
+    assert jobs.failed[0]["summary"] == "A friendly greeting."
+    assert jobs.failed[0]["emotion"] == "The speaker sounds cheerful."
+    assert jobs.failed[0]["gcs_object_path"] is not None

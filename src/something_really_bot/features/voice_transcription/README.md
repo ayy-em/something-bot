@@ -3,7 +3,7 @@
 Transcribes Telegram voice memos: downloads the file, stores it in
 GCS, transcribes via OpenAI `gpt-4o-transcribe`, optionally generates
 a 1-3 sentence summary + 1 sentence emotion read in a single chat
-call (only for memos over 60 seconds), and edits the in-flight
+call (only for memos over 2 minutes), and edits the in-flight
 "Transcribing…" ack with the final reply.
 
 ## Flow
@@ -23,20 +23,26 @@ incoming voice message (private, group, supergroup)
         ├── gcs.upload at voice_transcription_requests/{chat}/{msg}/voice_{uniq}.ogg
         ├── jobs.update_status(id, "transcribing")
         ├── openai.audio.transcriptions.create(model="gpt-4o-transcribe")
-        ├── if voice.duration > 60s:
+        ├── if voice.duration > 120s:
         │     ├── jobs.update_status(id, "analyzing")
         │     └── openai.chat.completions.create with JSON response_format
         │           → {"summary": "...", "emotion": "..."}
         ├── jobs.update_status(id, "sending")
-        ├── telegram.edit_message_text(ack_message_id, formatted reply)
-        │     ↳ falls back to send_message if the edit fails
+        ├── if reply fits in 4096 chars:
+        │     └── telegram.edit_message_text(ack_message_id, single reply)
+        ├── else (long transcript):
+        │     ├── edit ack with summary/vibe + "split into N messages" notice
+        │     └── send N transcript chunks as separate messages
+        │           (last chunk ends with "End of transcript")
         ├── jobs.mark_succeeded(...)
         └── persistence.record_event("voice_transcription_succeeded", ...)
 ```
 
 Failure at any step:
 
-* mark row failed with `error_class`/`error_message`
+* mark row failed with `error_class`/`error_message` plus any partial
+  results available at the point of failure (transcript, summary,
+  emotion, GCS path)
 * edit the ack with a user-visible error reply (matrix below) — same
   edit-or-fallback path as success
 * swallow further Telegram send failures so we don't loop on a broken chat
@@ -57,7 +63,7 @@ user gets one clear rejection reply and that's it.
 
 Two templates, picked by duration:
 
-**Long memo (`voice.duration > 60s`)** — runs the OpenAI chat summary
+**Long memo (`voice.duration > 120s`)** — runs the OpenAI chat summary
 + emotion read, renders both in one blockquote alongside the
 transcript in another:
 
@@ -70,8 +76,8 @@ Transcript:
 <blockquote><full transcript></blockquote>
 ```
 
-**Short memo (`voice.duration <= 60s`)** — skips the analyze step
-entirely (saves one OpenAI call and a couple seconds; for a 30-second
+**Short memo (`voice.duration <= 120s`)** — skips the analyze step
+entirely (saves one OpenAI call and a couple seconds; for a short
 memo the transcript itself is shorter than any commentary would be):
 
 ```
@@ -83,11 +89,27 @@ Sent with `parse_mode="HTML"`. Free-form OpenAI output is
 `html.escape`-d before interpolation so a stray `<` in a transcript
 doesn't break the HTML parse.
 
-**One bot message per memo.** The `Transcribing your voice memo…`
-ack is *edited in place* with the final reply when the background
-task finishes — the user never sees a separate ack message hanging
-around. If the edit fails (rare), we fall back to sending the reply
-as a new message so the user still gets the result.
+**Single-message replies** when the reply fits within Telegram's
+4096-character limit. The `Transcribing your voice memo…` ack is
+*edited in place* with the final reply when the background task
+finishes — the user never sees a separate ack message hanging around.
+If the edit fails (rare), we fall back to sending the reply as a new
+message so the user still gets the result.
+
+**Multi-message replies** when the transcript exceeds 4096 characters:
+
+1. The ack is edited with the summary/vibe (for long memos) or a
+   plain notice, plus "The transcript is too long and will be split
+   into N messages."
+2. N follow-up messages: `Transcript pt. 1 of N:` through
+   `Transcript pt. N of N:`, each with the chunk in a blockquote.
+3. The last chunk appends "End of transcript".
+
+Chunk boundaries prefer newlines, then spaces, and never split
+inside an HTML entity. If a subsequent chunk send fails, earlier
+chunks are still delivered (partial delivery over total failure).
+The full transcript is always persisted to Postgres regardless of
+send outcome.
 
 ## Error matrix
 

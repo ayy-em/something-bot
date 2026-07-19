@@ -661,10 +661,13 @@ this feature.
    `voice_transcription_requests/{chat_id}/{message_id}/voice_{file_unique_id}.ogg`.
 3. Transcribe via OpenAI `audio.transcriptions.create` with
    `model="gpt-4o-transcribe"`.
-4. One `chat.completions.create` call with `response_format=json_object`
-   returns `{"summary": "...", "emotion": "..."}`.
+4. For memos over 2 minutes: one `chat.completions.create` call with
+   `response_format=json_object` returns `{"summary": "...", "emotion": "..."}`.
+   Memos at or under 2 minutes skip this step.
 5. Reply to the original voice memo with the formatted transcript +
-   summary + emotion read.
+   summary + emotion read.  If the reply exceeds Telegram's 4096-char
+   message limit, the bot sends a header/notice first, then the
+   transcript in numbered chunks ending with "End of transcript".
 
 Webhook acks Telegram immediately after the inline "Transcribing your
 voice memo…" reply + 👀 reaction; steps 1–5 run in
@@ -676,7 +679,8 @@ voice memo…" reply + 👀 reaction; steps 1–5 run in
 lifecycle (`pending → downloading → uploading → transcribing → analyzing
 → sending → succeeded`, or `failed` at any step). Stores transcript,
 summary, emotion, GCS path, and Telegram reply message id on success;
-`error_class`/`error_message` on failure.
+`error_class`/`error_message` plus any available partial results
+(transcript, summary, emotion, GCS path) on failure.
 
 ### Error reporting
 

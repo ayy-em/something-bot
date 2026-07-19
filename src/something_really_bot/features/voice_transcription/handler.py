@@ -62,7 +62,8 @@ MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024
 # Voice memos at or under this duration skip the OpenAI chat summary
 # step — the transcript itself is shorter than any commentary would be
 # (#56).
-SHORT_DURATION_THRESHOLD_SECONDS = 60
+SHORT_DURATION_THRESHOLD_SECONDS = 120
+TELEGRAM_MESSAGE_LIMIT = 4096
 
 ACK_REACTION = "👀"
 ACK_TEXT = "Transcribing your voice memo…"
@@ -324,9 +325,9 @@ async def _run_background(ctx: _BackgroundContext) -> None:
 
     if user_facing_error is None and transcript is not None:
         await _safe_status(ctx.job_storage, job_id, "sending")
-        reply_text = _compose_reply(transcript, summary, emotion)
+        reply_messages = _compose_reply_messages(transcript, summary, emotion)
         try:
-            telegram_reply_message_id = await _deliver_reply(ctx, reply_text)
+            telegram_reply_message_id = await _deliver_replies(ctx, reply_messages)
         except TelegramSendError as exc:
             error_class = type(exc).__name__
             error_message = str(exc)
@@ -359,13 +360,17 @@ async def _run_background(ctx: _BackgroundContext) -> None:
     # Failure path.
     if user_facing_error is not None:
         with contextlib.suppress(TelegramSendError):
-            await _deliver_reply(ctx, user_facing_error, parse_mode=None)
+            await _deliver_replies(ctx, [user_facing_error], parse_mode=None)
         if job_id is not None and ctx.job_storage is not None:
             try:
                 await ctx.job_storage.mark_failed(
                     job_id,
                     error_class=error_class or "Unknown",
                     error_message=error_message or "",
+                    transcript=transcript,
+                    summary=summary,
+                    emotion=emotion,
+                    gcs_object_path=object_key,
                 )
             except Exception:  # noqa: BLE001
                 _logger.exception("voice_transcription_mark_failed_failed")
@@ -378,33 +383,163 @@ async def _run_background(ctx: _BackgroundContext) -> None:
         )
 
 
-def _compose_reply(
+def _chunk_transcript(escaped_transcript: str, *, max_chunk_size: int) -> list[str]:
+    """Split already-HTML-escaped transcript text into chunks.
+
+    Prefers splitting at newlines, then spaces, then hard-cuts.  Never
+    splits inside an HTML entity (``&amp;`` etc.).
+    """
+    if len(escaped_transcript) <= max_chunk_size:
+        return [escaped_transcript]
+
+    chunks: list[str] = []
+    remaining = escaped_transcript
+    while remaining:
+        if len(remaining) <= max_chunk_size:
+            chunks.append(remaining)
+            break
+
+        split_at = remaining.rfind("\n", 0, max_chunk_size)
+        if split_at == -1:
+            split_at = remaining.rfind(" ", 0, max_chunk_size)
+        if split_at == -1:
+            split_at = max_chunk_size
+
+        amp = remaining.rfind("&", 0, split_at + 1)
+        if amp != -1 and ";" not in remaining[amp : split_at + 1]:
+            split_at = amp
+
+        chunks.append(remaining[:split_at])
+        remaining = remaining[split_at:].lstrip(" ")
+    return chunks
+
+
+_SPLIT_NOTICE = "The transcript is too long and will be split into {n} messages."
+_CHUNK_PREFIX = "Transcript pt. {i} of {n}:\n<blockquote>"
+_CHUNK_SUFFIX = "</blockquote>"
+_END_MARKER = "\nEnd of transcript"
+
+
+def _compose_reply_messages(
     transcript: str,
     summary: str | None,
     emotion: str | None,
-) -> str:
-    """Pick the long or short template based on whether we ran analysis."""
+) -> list[str]:
+    """Build one or more HTML reply messages for the transcription result.
+
+    Returns a single-element list when everything fits in one Telegram
+    message; returns multiple messages with a header/notice + numbered
+    transcript chunks when it doesn't.
+    """
     escaped_transcript = html.escape(transcript)
-    if summary is not None and emotion is not None:
-        return _LONG_REPLY_TEMPLATE.format(
+    has_analysis = summary is not None and emotion is not None
+
+    if has_analysis:
+        single = _LONG_REPLY_TEMPLATE.format(
             summary=html.escape(summary),
             emotion=html.escape(emotion),
             transcript=escaped_transcript,
         )
-    return _SHORT_REPLY_TEMPLATE.format(transcript=escaped_transcript)
+    else:
+        single = _SHORT_REPLY_TEMPLATE.format(transcript=escaped_transcript)
+
+    if len(single) <= TELEGRAM_MESSAGE_LIMIT:
+        return [single]
+
+    if has_analysis:
+        header = (
+            "Summary & Vibe:\n<blockquote>"
+            + html.escape(summary)  # type: ignore[arg-type]
+            + "\n"
+            + html.escape(emotion)  # type: ignore[arg-type]
+            + "</blockquote>"
+        )
+    else:
+        header = None
+
+    total_len = len(escaped_transcript)
+    n_chunks = 2
+    avail_middle = 0
+    for _ in range(20):
+        sample_prefix = _CHUNK_PREFIX.format(i=n_chunks, n=n_chunks)
+        overhead = len(sample_prefix) + len(_CHUNK_SUFFIX)
+        last_overhead = overhead + len(_END_MARKER)
+        avail_middle = TELEGRAM_MESSAGE_LIMIT - overhead
+        avail_last = TELEGRAM_MESSAGE_LIMIT - last_overhead
+        if avail_middle <= 0 or avail_last <= 0:
+            n_chunks += 1
+            continue
+        capacity = avail_middle * (n_chunks - 1) + avail_last
+        if capacity >= total_len:
+            break
+        n_chunks += 1
+
+    chunks = _chunk_transcript(escaped_transcript, max_chunk_size=avail_middle)
+
+    messages: list[str] = []
+    total = len(chunks)
+    notice = _SPLIT_NOTICE.format(n=total)
+    if header is not None:
+        messages.append(header + "\n\n" + notice)
+    else:
+        messages.append(notice)
+
+    for i, chunk in enumerate(chunks, start=1):
+        prefix = _CHUNK_PREFIX.format(i=i, n=total)
+        suffix = _CHUNK_SUFFIX
+        if i == total:
+            suffix += _END_MARKER
+        messages.append(prefix + chunk + suffix)
+
+    return messages
 
 
-async def _deliver_reply(
+async def _deliver_replies(
     ctx: _BackgroundContext,
-    text: str,
+    messages: list[str],
     *,
     parse_mode: str | None = REPLY_PARSE_MODE,
 ) -> int | None:
+    """Deliver one or more reply messages.
+
+    The first message edits the ack (falling back to a fresh send).
+    Subsequent messages are sent as new messages.  Returns the message
+    id the user sees for the first message, when known.  Raises
+    :class:`TelegramSendError` only if the *first* message delivery
+    fails entirely.
+    """
+    first_id = await _deliver_single(ctx, messages[0], parse_mode=parse_mode)
+
+    for msg in messages[1:]:
+        try:
+            await ctx.telegram_client.send_message(
+                chat_id=ctx.chat_id,
+                text=msg,
+                parse_mode=parse_mode,
+            )
+        except TelegramSendError as exc:
+            _logger.warning(
+                "voice_transcription_chunk_send_failed",
+                extra={
+                    "chat_id": ctx.chat_id,
+                    "error": f"{type(exc).__name__}: {exc}",
+                },
+            )
+
+    return first_id
+
+
+async def _deliver_single(
+    ctx: _BackgroundContext,
+    text: str,
+    *,
+    parse_mode: str | None,
+) -> int | None:
     """Edit the ack message with ``text``; fall back to a fresh send.
 
-    Returns the message id the user sees, when known. Raises
+    Returns the message id the user sees, when known.  Raises
     :class:`TelegramSendError` only if both the edit and the fallback
-    send fail — callers wrap accordingly.
+    send fail.
     """
     if ctx.ack_message_id is not None:
         try:

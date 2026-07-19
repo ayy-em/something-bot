@@ -158,13 +158,35 @@ class VoiceJobStorage:
             ),
         )
 
-    async def mark_failed(self, job_id: int, *, error_class: str, error_message: str) -> None:
+    async def mark_failed(
+        self,
+        job_id: int,
+        *,
+        error_class: str,
+        error_message: str,
+        transcript: str | None = None,
+        summary: str | None = None,
+        emotion: str | None = None,
+        gcs_object_path: str | None = None,
+    ) -> None:
+        """Mark a job as failed, optionally preserving partial results."""
         sql = (
             f"UPDATE {TABLE_FQN} SET status = 'failed', "
-            "error_class = %s, error_message = %s, updated_at = %s "
+            "error_class = %s, error_message = %s, "
+            "transcript = %s, summary = %s, emotion = %s, "
+            "gcs_object_path = %s, updated_at = %s "
             "WHERE id = %s"
         )
         await self._pg.execute(
             sql,
-            (error_class, error_message[:2000], datetime.now(UTC), job_id),
+            (
+                error_class,
+                error_message[:2000],
+                transcript,
+                summary,
+                emotion,
+                gcs_object_path,
+                datetime.now(UTC),
+                job_id,
+            ),
         )
