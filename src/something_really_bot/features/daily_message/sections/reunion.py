@@ -70,9 +70,7 @@ class ReunionSection:
             return f"❤️ {md(line)}"
         return None
 
-    def _render_with_duration(
-        self, target: date, duration: int, today: date
-    ) -> str | None:
+    def _render_with_duration(self, target: date, duration: int, today: date) -> str | None:
         """Handle all three phases: countdown, enjoying, expired."""
         if is_during_reunion(target, today, duration):
             return f"❤️ {md(ENJOYING_MESSAGE)}"

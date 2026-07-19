@@ -300,9 +300,7 @@ async def test_handle_without_storage_returns_error() -> None:
         "something_really_bot.features.next_reunion.duration_handler.get_postgres_storage",
         return_value=None,
     ):
-        result = await handler.handle(
-            _private_command("/next_reunion_duration"), _ctx()
-        )
+        result = await handler.handle(_private_command("/next_reunion_duration"), _ctx())
 
     assert result.handled is True
     assert "not configured" in result.reply_text.lower()

@@ -484,7 +484,11 @@ async def test_run_shows_milestone_at_seven_days() -> None:
     tg = _FakeTelegramClient()
     schedule = _everyday_schedule("reunion")
     job = DailyMessageJob(
-        sections=[ReunionSection(reunion_fetcher=_seven_day_reunion, duration_fetcher=_no_duration_fetcher)],
+        sections=[
+            ReunionSection(
+                reunion_fetcher=_seven_day_reunion, duration_fetcher=_no_duration_fetcher
+            )
+        ],
         schedule=schedule,
         now=_fixed_now,
     )
@@ -502,7 +506,9 @@ async def test_run_shows_today_milestone() -> None:
     tg = _FakeTelegramClient()
     schedule = _everyday_schedule("reunion")
     job = DailyMessageJob(
-        sections=[ReunionSection(reunion_fetcher=_today_reunion, duration_fetcher=_no_duration_fetcher)],
+        sections=[
+            ReunionSection(reunion_fetcher=_today_reunion, duration_fetcher=_no_duration_fetcher)
+        ],
         schedule=schedule,
         now=_fixed_now,
     )
