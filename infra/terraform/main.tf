@@ -259,6 +259,21 @@ resource "google_secret_manager_secret" "telegram_webhook_secret" {
   depends_on = [google_project_service.enabled]
 }
 
+# Shared bearer token for hand-invoked jobs (`GET /jobs/<name>?token=…`).
+# Placeholder only — add the version out-of-band, never in Terraform state:
+#   openssl rand -hex 32 | gcloud secrets versions add manual-job-token \
+#     --project=<project> --data-file=-
+resource "google_secret_manager_secret" "manual_job_token" {
+  project   = var.project_id
+  secret_id = "manual-job-token"
+
+  replication {
+    auto {}
+  }
+
+  depends_on = [google_project_service.enabled]
+}
+
 # --------------------------------------------------------------------------- #
 # Secret access for the Cloud Run runtime service account
 # --------------------------------------------------------------------------- #
@@ -286,6 +301,13 @@ resource "google_secret_manager_secret_iam_member" "cloudrun_webhook_secret" {
 
   project   = var.project_id
   secret_id = google_secret_manager_secret.telegram_webhook_secret[each.key].secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.cloudrun.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "cloudrun_manual_job_token" {
+  project   = var.project_id
+  secret_id = google_secret_manager_secret.manual_job_token.secret_id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.cloudrun.email}"
 }
@@ -440,14 +462,18 @@ resource "google_cloud_run_v2_service" "main" {
   }
 
   lifecycle {
-    # Image and env vars are owned by the deploy workflow (gcloud run deploy
-    # --image / --set-secrets in .github/workflows/deploy.yml). Without these
+    # Image, env vars, and the Cloud SQL socket mount are owned by the deploy
+    # workflow (gcloud run deploy --image / --set-secrets /
+    # --add-cloudsql-instances in .github/workflows/deploy.yml). Without these
     # ignores, every `terraform apply` would strip the secret env vars the
     # workflow injects (TELEGRAM_WEBHOOK_SECRET, TELEGRAM_BOT_TOKEN,
-    # TELEGRAM_QA_USERS) and the next revision would crash on boot.
+    # TELEGRAM_QA_USERS) and the next revision would crash on boot — and would
+    # unmount /cloudsql/<conn>, cutting Postgres off until the next deploy.
     ignore_changes = [
       template[0].containers[0].image,
       template[0].containers[0].env,
+      template[0].containers[0].volume_mounts,
+      template[0].volumes,
     ]
   }
 

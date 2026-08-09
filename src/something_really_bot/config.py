@@ -143,6 +143,15 @@ class Settings(BaseSettings):
             "Checked alongside ``scheduler_service_account_email``."
         ),
     )
+    manual_job_token: SecretStr | None = Field(
+        default=None,
+        description=(
+            "Shared secret for hand-invoking a job from a browser via "
+            "``GET /jobs/<name>?token=…``. A browser cannot present an OIDC "
+            "token, so this is the trust anchor for the GET route. When unset, "
+            "GET /jobs/* always 401 — the POST/OIDC route is unaffected."
+        ),
+    )
 
     # --- Shared Postgres (#31) ---
     postgres_dsn: SecretStr | None = Field(

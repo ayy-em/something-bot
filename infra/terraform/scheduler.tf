@@ -7,13 +7,15 @@
 
 locals {
   # Per-job configuration.
+  #
+  # ensure-webhook is deliberately NOT scheduled. It used to run every 15
+  # minutes, which — combined with `cpu_idle = false` (instance-based
+  # billing) — kept exactly one instance alive around the clock and cost
+  # ~EUR 96/month for ~10 requests an hour. The deploy workflow already
+  # calls setWebhook after every revision, so the job is a break-glass
+  # tool: invoke it by hand via `GET /jobs/ensure-webhook?token=…`.
+  # See docs/decisions/0003-manual-ensure-webhook.md.
   scheduled_jobs = {
-    ensure-webhook = {
-      schedule    = "*/15 * * * *"
-      timezone    = "UTC"
-      target_path = "/jobs/ensure-webhook"
-      description = "Self-healing: verify Telegram webhook is set, restore if missing."
-    }
     tiktok-reminder = {
       schedule    = "0 11 * * 5" # Friday 11:00
       timezone    = "Europe/Amsterdam"

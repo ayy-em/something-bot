@@ -1,6 +1,5 @@
 """Self-healing webhook and command-menu job.
 
-Cloud Scheduler fires ``POST /jobs/ensure-webhook`` every 15 minutes.
 The job checks whether the Telegram webhook is set to the expected URL
 and, if not, calls ``setWebhook`` to restore it.  It also syncs the
 bot's autocomplete command menu via ``setMyCommands``, reading the
@@ -8,6 +7,12 @@ canonical list from ``commands.yaml``.
 
 This guards against Telegram silently dropping the webhook after
 consecutive delivery failures (e.g. during a Cloud Run revision swap).
+
+Deliberately **not** on a Cloud Scheduler cadence: the deploy workflow
+already calls ``setWebhook`` after every revision, and a 15-minute ping
+kept an instance billable 24/7. Invoke it by hand when something looks
+broken — ``GET /jobs/ensure-webhook?token=…``. See
+``docs/decisions/0003-manual-ensure-webhook.md``.
 """
 
 from something_really_bot.logging import get_logger

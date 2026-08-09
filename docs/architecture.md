@@ -164,6 +164,20 @@ two consumers of this pattern. `daily-message` uses a YAML-driven
 schedule (`features/daily_message/sections.yaml`) to control which
 sections render on which days of the week.
 
+### Running a job by hand
+
+A registered job does not have to be scheduled. `GET /jobs/{name}?token=…`
+runs the same handler, authenticated by the `MANUAL_JOB_TOKEN` shared
+secret (`services/manual_job_auth.py`) rather than OIDC — a browser cannot
+mint an OIDC token. When `MANUAL_JOB_TOKEN` is unset the GET route always
+401s; the POST route is unaffected.
+
+`ensure-webhook` is the one job that runs *only* this way. It used to fire
+every 15 minutes, which under instance-based billing kept an instance alive
+around the clock for ~EUR 96/month. The deploy workflow already restores
+the webhook after each revision, so the job is now break-glass only:
+[decisions/0003-manual-ensure-webhook.md](decisions/0003-manual-ensure-webhook.md).
+
 ## File storage (#20)
 
 Private-chat photo / document / voice uploads are mirrored into GCS bucket

@@ -55,12 +55,14 @@ variable "cloudrun_settings" {
     max_instances   = number
   })
   default = {
-    # Bumped from 1 CPU / 512 MiB / 60s / 80 for #42 (video downloader):
-    # yt-dlp can buffer 50 MiB of video plus ffmpeg muxing, downloads take
-    # up to a minute, and we don't want one in-flight download to starve
-    # other webhook traffic — so per-instance concurrency goes down too.
-    cpu             = "2"
-    memory          = "2Gi"
+    # Sizing is a cost lever, not just a performance one: `cpu_idle = false`
+    # bills the instance's whole lifetime, so every vCPU-second and GiB-second
+    # is charged idle or not. Halved from 2 CPU / 2 GiB — a 50 MiB yt-dlp
+    # buffer plus ffmpeg muxing peaks well under 1 GiB, and the longer
+    # timeout plus reduced concurrency (#42) still keep one in-flight
+    # download from starving other webhook traffic.
+    cpu             = "1"
+    memory          = "1Gi"
     timeout_seconds = 300
     concurrency     = 8
     min_instances   = 0

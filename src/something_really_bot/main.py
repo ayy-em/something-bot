@@ -75,6 +75,7 @@ from something_really_bot.services.job_history import (
     safe_record,
 )
 from something_really_bot.services.jobs import JobRegistry, UnknownJobError
+from something_really_bot.services.manual_job_auth import verify_manual_job_token
 from something_really_bot.services.openai_client import get_openai_client
 from something_really_bot.services.pending_actions import (
     get_pending_action_store,
@@ -142,11 +143,13 @@ def build_default_dispatcher() -> Dispatcher:
 
 
 def build_default_job_registry() -> JobRegistry:
-    """Construct the production scheduled-job registry.
+    """Construct the production job registry.
 
     The Cloud Scheduler entries that trigger these jobs live in
-    ``infra/terraform/scheduler.tf`` — one ``locals.scheduled_jobs`` entry
-    per handler registered here.
+    ``infra/terraform/scheduler.tf``. Registration here does not imply a
+    schedule: ``ensure-webhook`` is registered but deliberately has no
+    ``locals.scheduled_jobs`` entry, and runs only when invoked by hand
+    (``GET /jobs/ensure-webhook?token=…``).
     """
     registry = JobRegistry()
     registry.register(TikTokReminderJob())
@@ -202,6 +205,28 @@ async def run_scheduled_job(
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> dict[str, str]:
     """Cloud Scheduler entry point. OIDC-verified by the dependency above."""
+    return await _dispatch_job(job_name, settings)
+
+
+@app.get(
+    "/jobs/{job_name}",
+    dependencies=[Depends(verify_manual_job_token)],
+)
+async def run_job_manually(
+    job_name: str,
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> dict[str, str]:
+    """Break-glass entry point: a human pasting ``?token=…`` into a browser.
+
+    Cloud Scheduler can mint an OIDC token; a browser cannot. Used mainly
+    for ensure-webhook, which is intentionally unscheduled — see
+    ``docs/decisions/0003-manual-ensure-webhook.md``.
+    """
+    return await _dispatch_job(job_name, settings)
+
+
+async def _dispatch_job(job_name: str, settings: Settings) -> dict[str, str]:
+    """Run a registered job and record its outcome in job history."""
     history_logger = get_job_history_logger()
     ctx = BotContext(
         settings=settings,
