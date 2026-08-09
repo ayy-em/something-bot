@@ -83,6 +83,22 @@ def test_manual_get_unconfigured_token_returns_401(
     config.get_settings.cache_clear()
 
 
+def test_manual_get_tolerates_trailing_newline_in_stored_secret(
+    monkeypatch: pytest.MonkeyPatch, _register_test_job: _TestJob
+) -> None:
+    """A secret piped in via `--data-file=-` keeps its trailing newline."""
+    from something_really_bot import config
+
+    config.get_settings.cache_clear()
+    monkeypatch.setenv("MANUAL_JOB_TOKEN", f"{TOKEN}\n")
+
+    response = client.get(f"/jobs/test-job?token={TOKEN}")
+
+    assert response.status_code == 200
+    assert _register_test_job.calls == 1
+    config.get_settings.cache_clear()
+
+
 def test_manual_get_with_unknown_job_returns_404(_configured_token) -> None:
     response = client.get(f"/jobs/never-registered?token={TOKEN}")
 

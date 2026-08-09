@@ -34,8 +34,11 @@ def verify_manual_job_token(
             detail="Manual job token not configured.",
         )
 
+    # Strip the stored value: `gcloud secrets versions add --data-file=-`
+    # keeps stdin verbatim, so a secret piped from `openssl rand` carries a
+    # trailing newline that would never appear in a pasted URL.
     supplied = request.query_params.get("token", "")
-    if not hmac.compare_digest(supplied, expected.get_secret_value()):
+    if not hmac.compare_digest(supplied, expected.get_secret_value().strip()):
         _logger.warning("manual_job_token_mismatch", extra={"path": request.url.path})
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
