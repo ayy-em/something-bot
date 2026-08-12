@@ -1,4 +1,4 @@
-"""Voice transcription handler + background orchestrator (#43).
+"""Voice transcription handler + background orchestrator (#43, #63).
 
 Matches voice messages in private, group, and supergroup chats. The
 handler does the bare minimum on the request hot path:
@@ -55,7 +55,7 @@ from something_really_bot.telegram.models import (
 _logger = get_logger(__name__)
 
 MAX_DURATION_SECONDS = 10 * 60  # 10 min
-# Whisper / gpt-4o-transcribe accepts up to 25 MB per request. 10 min
+# gpt-transcribe accepts up to 25 MB per request. 10 min
 # of Opus voice is ~3-5 MB so this is a defensive cap rather than a
 # practical one.
 MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024
@@ -68,6 +68,9 @@ TELEGRAM_MESSAGE_LIMIT = 4096
 ACK_REACTION = "👀"
 ACK_TEXT = "Transcribing your voice memo…"
 REPLY_PARSE_MODE = "HTML"
+# Caption on the roast voice message (#63). Sent as plain text — the
+# parody itself is audio, so there is nothing here to escape.
+_PARODY_CAPTION = "Okay, well — the short version of this is:"
 
 # Long-memo reply: summary + emotion read share one blockquote; the
 # transcript gets its own. Free-form OpenAI output is ``html.escape``-d
@@ -255,6 +258,9 @@ async def _run_background(ctx: _BackgroundContext) -> None:
     transcript: str | None = None
     summary: str | None = None
     emotion: str | None = None
+    parody_text: str | None = None
+    parody_audio: bytes | None = None
+    parody_object_key: str | None = None
     telegram_reply_message_id: int | None = None
 
     if ctx.transcriber is None:
@@ -304,7 +310,10 @@ async def _run_background(ctx: _BackgroundContext) -> None:
             user_facing_error = _ERROR_TRANSCRIPTION_FAILED
 
     # Skip the OpenAI chat analyze call for short memos (#56). For
-    # anything over the threshold we run the summary + emotion read.
+    # anything over the threshold we run the summary + emotion read, and
+    # the parody roast alongside it (#63) — both read the same transcript
+    # and neither needs the other's output, so serializing them would just
+    # add a chat round-trip to the wait.
     needs_analysis = (
         user_facing_error is None
         and transcript is not None
@@ -313,15 +322,31 @@ async def _run_background(ctx: _BackgroundContext) -> None:
     if needs_analysis:
         assert ctx.transcriber is not None
         await _safe_status(ctx.job_storage, job_id, "analyzing")
-        try:
-            analysis = await ctx.transcriber.analyze(transcript)  # type: ignore[arg-type]
-        except AnalysisError as exc:
-            error_class = type(exc).__name__
-            error_message = str(exc)
+        analysis_result, parody_result = await asyncio.gather(
+            ctx.transcriber.analyze(transcript),  # type: ignore[arg-type]
+            _build_parody(ctx.transcriber, transcript),  # type: ignore[arg-type]
+            return_exceptions=True,
+        )
+
+        if isinstance(analysis_result, AnalysisError):
+            error_class = type(analysis_result).__name__
+            error_message = str(analysis_result)
             user_facing_error = _ERROR_ANALYSIS_FAILED
+        elif isinstance(analysis_result, BaseException):
+            raise analysis_result
         else:
-            summary = analysis.summary
-            emotion = analysis.emotion
+            summary = analysis_result.summary
+            emotion = analysis_result.emotion
+
+        # The roast is garnish: a failure here is logged and dropped, and
+        # the transcript reply goes out exactly as it would have.
+        if isinstance(parody_result, BaseException):
+            _logger.warning(
+                "voice_parody_skipped",
+                extra={"error": f"{type(parody_result).__name__}: {parody_result}"},
+            )
+        else:
+            parody_text, parody_audio = parody_result
 
     if user_facing_error is None and transcript is not None:
         await _safe_status(ctx.job_storage, job_id, "sending")
@@ -332,6 +357,9 @@ async def _run_background(ctx: _BackgroundContext) -> None:
             error_class = type(exc).__name__
             error_message = str(exc)
             user_facing_error = _ERROR_GENERIC
+        else:
+            if parody_audio is not None:
+                parody_object_key = await _deliver_parody(ctx, parody_audio)
 
     if user_facing_error is None and transcript is not None:
         assert object_key is not None
@@ -344,6 +372,8 @@ async def _run_background(ctx: _BackgroundContext) -> None:
                     summary=summary,
                     emotion=emotion,
                     telegram_reply_message_id=telegram_reply_message_id,
+                    parody_text=parody_text,
+                    parody_gcs_object_path=parody_object_key,
                 )
             except Exception:  # noqa: BLE001
                 _logger.exception("voice_transcription_mark_succeeded_failed")
@@ -381,6 +411,55 @@ async def _run_background(ctx: _BackgroundContext) -> None:
             details=f"{error_class}: {error_message}",
             occurred_at=datetime.now(UTC),
         )
+
+
+async def _build_parody(transcriber: VoiceTranscriber, transcript: str) -> tuple[str, bytes]:
+    """Roast the speaker, then vocalize the roast.
+
+    Raises :class:`ParodyError` or :class:`SpeechError`; callers treat
+    either as "no roast this time" rather than as a failed job.
+    """
+    text = await transcriber.parody(transcript)
+    audio = await transcriber.synthesize(text)
+    return text, audio
+
+
+async def _deliver_parody(ctx: _BackgroundContext, audio: bytes) -> str | None:
+    """Send the roast as a voice message and archive it. Never raises.
+
+    Returns the GCS object key when the archival upload succeeded. The
+    send is what matters; the upload is bookkeeping and is allowed to fail
+    on its own.
+    """
+    try:
+        await ctx.telegram_client.send_voice(
+            chat_id=ctx.chat_id,
+            voice_bytes=audio,
+            filename=f"parody_{ctx.voice.file_unique_id}.ogg",
+            caption=_PARODY_CAPTION,
+            reply_to_message_id=ctx.message_id,
+        )
+    except TelegramSendError as exc:
+        _logger.warning(
+            "voice_parody_send_failed",
+            extra={"chat_id": ctx.chat_id, "error": f"{type(exc).__name__}: {exc}"},
+        )
+        return None
+
+    object_key = (
+        f"voice_transcription_requests/{ctx.chat_id}/{ctx.message_id}/"
+        f"parody_{ctx.voice.file_unique_id}.ogg"
+    )
+    try:
+        await ctx.gcs_storage.upload(
+            object_key=object_key,
+            data=audio,
+            content_type="audio/ogg",
+        )
+    except Exception:  # noqa: BLE001 — the joke already landed
+        _logger.exception("voice_parody_upload_failed")
+        return None
+    return object_key
 
 
 def _chunk_transcript(escaped_transcript: str, *, max_chunk_size: int) -> list[str]:

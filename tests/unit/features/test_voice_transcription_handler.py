@@ -14,6 +14,7 @@ from pydantic import SecretStr
 
 from something_really_bot.config import Settings
 from something_really_bot.features.voice_transcription.handler import (
+    _PARODY_CAPTION,
     TELEGRAM_MESSAGE_LIMIT,
     VoiceTranscriptionHandler,
     _chunk_transcript,
@@ -22,6 +23,8 @@ from something_really_bot.features.voice_transcription.handler import (
 from something_really_bot.features.voice_transcription.transcriber import (
     Analysis,
     AnalysisError,
+    ParodyError,
+    SpeechError,
     TranscriptionError,
 )
 from something_really_bot.persistence import EventRecord
@@ -86,7 +89,12 @@ def _group_voice_msg(voice: Voice | None = None) -> GroupMessage:
 class _FakeTelegram:
     sent_messages: list[dict[str, Any]] = field(default_factory=list)
     edited_messages: list[dict[str, Any]] = field(default_factory=list)
+    voice_messages: list[dict[str, Any]] = field(default_factory=list)
     reactions: list[dict[str, Any]] = field(default_factory=list)
+    # Ordered record of outbound calls, so tests can assert that the roast
+    # lands *after* the transcript rather than just alongside it.
+    call_log: list[str] = field(default_factory=list)
+    send_voice_raises: BaseException | None = None
     get_file_path_calls: list[str] = field(default_factory=list)
     download_calls: list[str] = field(default_factory=list)
     file_path_to_return: str = "voice/file_42.ogg"
@@ -101,6 +109,7 @@ class _FakeTelegram:
     async def send_message(self, chat_id, text, *, reply_to_message_id=None, parse_mode=None):
         if self.send_message_raises is not None:
             raise self.send_message_raises
+        self.call_log.append("send_message")
         self.sent_messages.append(
             {
                 "chat_id": chat_id,
@@ -114,6 +123,7 @@ class _FakeTelegram:
     async def edit_message_text(self, chat_id, message_id, text, *, parse_mode=None):
         if self.edit_message_raises is not None:
             raise self.edit_message_raises
+        self.call_log.append("edit_message_text")
         self.edited_messages.append(
             {
                 "chat_id": chat_id,
@@ -129,6 +139,33 @@ class _FakeTelegram:
             raise self.reaction_raises
         self.reactions.append({"chat_id": chat_id, "message_id": message_id, "emoji": emoji})
         return {"ok": True}
+
+    async def send_voice(
+        self,
+        chat_id,
+        voice_bytes,
+        *,
+        filename="voice.ogg",
+        caption=None,
+        parse_mode=None,
+        reply_to_message_id=None,
+        duration_seconds=None,
+    ):
+        if self.send_voice_raises is not None:
+            raise self.send_voice_raises
+        self.call_log.append("send_voice")
+        self.voice_messages.append(
+            {
+                "chat_id": chat_id,
+                "bytes": voice_bytes,
+                "filename": filename,
+                "caption": caption,
+                "parse_mode": parse_mode,
+                "reply_to_message_id": reply_to_message_id,
+                "duration_seconds": duration_seconds,
+            }
+        )
+        return {"message_id": 9500}
 
     async def get_file_path(self, file_id):
         if self.get_file_raises is not None:
@@ -175,6 +212,15 @@ class _FakeTranscriber:
     )
     transcribe_raises: BaseException | None = None
     analyze_raises: BaseException | None = None
+    # The roast (#63) is opt-in per test: most of these cases predate it
+    # and assert on exact upload/message counts, which a roast would move.
+    parody_enabled: bool = False
+    parodies: list[str] = field(default_factory=list)
+    synthesized: list[str] = field(default_factory=list)
+    parody_return: str = "So anyway, I said the thing, at length, again."
+    synthesize_return: bytes = b"ogg-opus-bytes"
+    parody_raises: BaseException | None = None
+    synthesize_raises: BaseException | None = None
 
     async def transcribe(self, audio_bytes, *, filename):  # noqa: ARG002
         if self.transcribe_raises is not None:
@@ -187,6 +233,20 @@ class _FakeTranscriber:
             raise self.analyze_raises
         self.analyses.append(transcript)
         return self.analyze_return
+
+    async def parody(self, transcript):
+        if not self.parody_enabled:
+            raise ParodyError("parody not enabled in this fake")
+        if self.parody_raises is not None:
+            raise self.parody_raises
+        self.parodies.append(transcript)
+        return self.parody_return
+
+    async def synthesize(self, text):
+        if self.synthesize_raises is not None:
+            raise self.synthesize_raises
+        self.synthesized.append(text)
+        return self.synthesize_return
 
 
 @dataclass
@@ -774,3 +834,148 @@ async def test_send_failure_persists_all_partial_results() -> None:
     assert jobs.failed[0]["summary"] == "A friendly greeting."
     assert jobs.failed[0]["emotion"] == "The speaker sounds cheerful."
     assert jobs.failed[0]["gcs_object_path"] is not None
+
+
+# =============================================================================
+# Parody roast (#63)
+# =============================================================================
+
+
+def _roast_setup(
+    *,
+    telegram: _FakeTelegram | None = None,
+    gcs: _FakeGCS | None = None,
+    jobs: _FakeJobStorage | None = None,
+    **transcriber_kwargs: Any,
+) -> tuple[VoiceTranscriptionHandler, list[Any], _FakeTelegram, _FakeGCS, _FakeTranscriber]:
+    """Handler wired for the roast path, with the background coro captured."""
+    tg = telegram or _FakeTelegram()
+    storage = gcs or _FakeGCS()
+    transcriber = _FakeTranscriber(parody_enabled=True, **transcriber_kwargs)
+    scheduled: list[Any] = []
+    handler = _build_handler(
+        telegram=tg,
+        gcs=storage,
+        transcriber=transcriber,
+        jobs=jobs,
+        scheduler=lambda c: scheduled.append(c),
+    )
+    return handler, scheduled, tg, storage, transcriber
+
+
+async def test_long_memo_sends_roast_after_the_transcript() -> None:
+    handler, scheduled, tg, _, transcriber = _roast_setup()
+
+    await handler.handle(_private_voice_msg(voice=_voice(duration=150)), _ctx())
+    await scheduled[0]
+
+    # The roast is fed the transcript, and what it says is what gets spoken.
+    assert transcriber.parodies == ["Hello there."]
+    assert transcriber.synthesized == [transcriber.parody_return]
+
+    assert len(tg.voice_messages) == 1
+    voice = tg.voice_messages[0]
+    assert voice["bytes"] == b"ogg-opus-bytes"
+    assert voice["caption"] == _PARODY_CAPTION
+    assert voice["chat_id"] == 100
+    # Replies to the original memo, not to the transcript message.
+    assert voice["reply_to_message_id"] == 42
+    assert voice["filename"].endswith(".ogg")
+
+    # Transcript first, roast second.
+    assert tg.call_log.index("edit_message_text") < tg.call_log.index("send_voice")
+
+
+async def test_roast_audio_is_archived_and_persisted() -> None:
+    jobs = _FakeJobStorage()
+    handler, scheduled, _, gcs, _ = _roast_setup(jobs=jobs)
+
+    await handler.handle(_private_voice_msg(voice=_voice(duration=150)), _ctx())
+    await scheduled[0]
+
+    # Source memo + roast audio.
+    assert len(gcs.uploads) == 2
+    parody_upload = gcs.uploads[1]
+    assert parody_upload["object_key"] == (
+        "voice_transcription_requests/100/42/parody_voice-uniq.ogg"
+    )
+    assert parody_upload["content_type"] == "audio/ogg"
+
+    assert len(jobs.succeeded) == 1
+    assert jobs.succeeded[0]["parody_text"] == "So anyway, I said the thing, at length, again."
+    assert jobs.succeeded[0]["parody_gcs_object_path"] == parody_upload["object_key"]
+
+
+async def test_short_memo_gets_no_roast() -> None:
+    handler, scheduled, tg, _, transcriber = _roast_setup()
+
+    await handler.handle(_private_voice_msg(voice=_voice(duration=120)), _ctx())
+    await scheduled[0]
+
+    assert transcriber.parodies == []
+    assert transcriber.synthesized == []
+    assert tg.voice_messages == []
+
+
+async def test_roast_failure_leaves_the_transcript_untouched() -> None:
+    jobs = _FakeJobStorage()
+    handler, scheduled, tg, _, _ = _roast_setup(
+        jobs=jobs, parody_raises=ParodyError("model on fire")
+    )
+
+    await handler.handle(_private_voice_msg(voice=_voice(duration=150)), _ctx())
+    await scheduled[0]
+
+    assert tg.voice_messages == []
+    assert len(tg.edited_messages) == 1
+    assert "Hello there." in tg.edited_messages[0]["text"]
+    assert len(jobs.succeeded) == 1
+    assert jobs.succeeded[0]["parody_text"] is None
+
+
+async def test_speech_failure_leaves_the_transcript_untouched() -> None:
+    handler, scheduled, tg, _, _ = _roast_setup(synthesize_raises=SpeechError("no voice today"))
+
+    await handler.handle(_private_voice_msg(voice=_voice(duration=150)), _ctx())
+    await scheduled[0]
+
+    assert tg.voice_messages == []
+    assert len(tg.edited_messages) == 1
+    assert "Hello there." in tg.edited_messages[0]["text"]
+
+
+async def test_send_voice_failure_still_marks_job_succeeded() -> None:
+    jobs = _FakeJobStorage()
+    handler, scheduled, _, gcs, _ = _roast_setup(
+        telegram=_FakeTelegram(send_voice_raises=TelegramSendError("voice rejected")),
+        jobs=jobs,
+    )
+
+    await handler.handle(_private_voice_msg(voice=_voice(duration=150)), _ctx())
+    await scheduled[0]
+
+    assert len(jobs.succeeded) == 1
+    assert jobs.succeeded[0]["parody_gcs_object_path"] is None
+    # A rejected voice message must not leave orphaned audio in GCS.
+    assert len(gcs.uploads) == 1
+
+
+async def test_analysis_failure_suppresses_the_roast() -> None:
+    """The error reply is the last word; no punchline on top of it."""
+    handler, scheduled, tg, _, _ = _roast_setup(analyze_raises=AnalysisError("bad json"))
+
+    await handler.handle(_private_voice_msg(voice=_voice(duration=150)), _ctx())
+    await scheduled[0]
+
+    assert tg.voice_messages == []
+
+
+async def test_roast_reaches_group_chats() -> None:
+    handler, scheduled, tg, _, _ = _roast_setup()
+
+    await handler.handle(_group_voice_msg(voice=_voice(duration=150)), _ctx())
+    await scheduled[0]
+
+    assert len(tg.voice_messages) == 1
+    assert tg.voice_messages[0]["chat_id"] == -1001
+    assert tg.voice_messages[0]["reply_to_message_id"] == 77

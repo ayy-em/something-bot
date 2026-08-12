@@ -67,6 +67,14 @@ _CREATE_INDEX_SQL = (
     f"ON {TABLE_FQN} (chat_id, created_at DESC)"
 )
 
+# Columns added after the table shipped. ``ADD COLUMN IF NOT EXISTS`` keeps
+# ensure_table() idempotent for both a fresh DB (already covered by the
+# CREATE above) and the live one, which predates #63.
+_ADD_COLUMNS_SQL = (
+    f"ALTER TABLE {TABLE_FQN} ADD COLUMN IF NOT EXISTS parody_text TEXT",
+    f"ALTER TABLE {TABLE_FQN} ADD COLUMN IF NOT EXISTS parody_gcs_object_path TEXT",
+)
+
 
 @dataclass(frozen=True)
 class JobRow:
@@ -95,6 +103,8 @@ class VoiceJobStorage:
             return
         await self._pg.execute(_CREATE_TABLE_SQL)
         await self._pg.execute(_CREATE_INDEX_SQL)
+        for statement in _ADD_COLUMNS_SQL:
+            await self._pg.execute(statement)
         self._table_ready = True
 
     async def insert_pending(self, job: JobRow) -> int:
@@ -138,11 +148,14 @@ class VoiceJobStorage:
         summary: str | None,
         emotion: str | None,
         telegram_reply_message_id: int | None,
+        parody_text: str | None = None,
+        parody_gcs_object_path: str | None = None,
     ) -> None:
         sql = (
             f"UPDATE {TABLE_FQN} SET status = 'succeeded', "
             "gcs_object_path = %s, transcript = %s, summary = %s, "
             "emotion = %s, telegram_reply_message_id = %s, "
+            "parody_text = %s, parody_gcs_object_path = %s, "
             "updated_at = %s WHERE id = %s"
         )
         await self._pg.execute(
@@ -153,6 +166,8 @@ class VoiceJobStorage:
                 summary,
                 emotion,
                 telegram_reply_message_id,
+                parody_text,
+                parody_gcs_object_path,
                 datetime.now(UTC),
                 job_id,
             ),

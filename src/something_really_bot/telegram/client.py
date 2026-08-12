@@ -3,7 +3,8 @@
 Centralises outbound calls so handlers never construct HTTP requests
 themselves; this keeps the bot token in exactly one place and makes tests
 trivially mockable. Implements ``sendMessage`` (#15), ``getFile`` + file
-download (#20), ``sendVideo`` + ``setMessageReaction`` (#42).
+download (#20), ``sendVideo`` + ``setMessageReaction`` (#42), ``sendVoice``
+(#63).
 
 Bot token is held as :class:`SecretStr` and only unwrapped inside the URL
 that goes to ``api.telegram.org``. The token never appears in log records.
@@ -213,6 +214,68 @@ class TelegramClient:
                 extra={"chat_id": chat_id, "description": body.get("description")},
             )
             raise TelegramSendError(f"sendDocument not ok: {body.get('description')!r}")
+
+        return body.get("result", {})
+
+    async def send_voice(
+        self,
+        chat_id: int,
+        voice_bytes: bytes,
+        *,
+        filename: str = "voice.ogg",
+        caption: str | None = None,
+        parse_mode: str | None = None,
+        reply_to_message_id: int | None = None,
+        duration_seconds: int | None = None,
+    ) -> dict[str, Any]:
+        """POST ``sendVoice`` with raw bytes as multipart upload.
+
+        Telegram renders the result as a playable voice message (waveform
+        bubble) rather than a file, which requires Ogg/Opus audio — the
+        format OpenAI's TTS returns for ``response_format="opus"``.
+
+        Raises:
+            TelegramSendError: HTTP error or ``ok=false`` in the response.
+        """
+        url = f"{self._base_url}/bot{self._token.get_secret_value()}/sendVoice"
+        data: dict[str, Any] = {"chat_id": str(chat_id)}
+        if caption is not None:
+            data["caption"] = caption
+        if parse_mode is not None:
+            data["parse_mode"] = parse_mode
+        if duration_seconds is not None:
+            data["duration"] = str(duration_seconds)
+        if reply_to_message_id is not None:
+            data["reply_parameters"] = json.dumps(
+                {
+                    "message_id": reply_to_message_id,
+                    "allow_sending_without_reply": True,
+                }
+            )
+
+        files = {"voice": (filename, voice_bytes, "audio/ogg")}
+        response = await self._request(
+            "POST",
+            url,
+            data=data,
+            files=files,
+            timeout=_UPLOAD_TIMEOUT,
+        )
+
+        if response.status_code >= 400:
+            _logger.warning(
+                "telegram_send_voice_http_error",
+                extra={"status": response.status_code, "chat_id": chat_id},
+            )
+            raise TelegramSendError(f"sendVoice HTTP {response.status_code}")
+
+        body = response.json()
+        if not body.get("ok"):
+            _logger.warning(
+                "telegram_send_voice_not_ok",
+                extra={"chat_id": chat_id, "description": body.get("description")},
+            )
+            raise TelegramSendError(f"sendVoice not ok: {body.get('description')!r}")
 
         return body.get("result", {})
 

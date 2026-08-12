@@ -127,6 +127,26 @@ Failures (timeouts, rate limits, no API key) degrade gracefully — the
 handler returns a deterministic apology reply and sets `HandlerResult.error`
 so the webhook records a `handler_errored` event in `processing_events`.
 
+### Model settings
+
+Four OpenAI model knobs, deliberately separate:
+
+| Setting | Default | Used by |
+| --- | --- | --- |
+| `OPENAI_MODEL` | `gpt-4o-mini` | chat fallback, OCR, voice-memo summary/emotion |
+| `OPENAI_PARODY_MODEL` | `gpt-5.2` | voice-memo parody roast (#63) |
+| `OPENAI_TTS_MODEL` | `gpt-4o-mini-tts` | speaking the roast (#63) |
+| `OPENAI_TTS_VOICE` | `marin` | ditto |
+
+Transcription is not configurable — `gpt-transcribe` is pinned in
+`features/voice_transcription/transcriber.py`, since a bad value there
+breaks the feature outright rather than degrading it.
+
+The parody model is split out because `OPENAI_MODEL` drives the bot's
+ordinary conversational voice in three places; the roast wants a stronger
+model without dragging those along, and its failures are silent, so a
+costlier model there cannot break anything user-visible.
+
 ### Handler precedence
 
 `HelloWorldHandler` (#15) is still registered but is **gated** behind
@@ -177,6 +197,27 @@ every 15 minutes, which under instance-based billing kept an instance alive
 around the clock for ~EUR 96/month. The deploy workflow already restores
 the webhook after each revision, so the job is now break-glass only:
 [decisions/0003-manual-ensure-webhook.md](decisions/0003-manual-ensure-webhook.md).
+
+### Webhook heartbeat (#62)
+
+Deploy-time restoration is not enough on its own: on 2026-08-10 the webhook
+vanished between deploys — `getWebhookInfo` returned an empty `url` with no
+`last_error_message` — and stayed gone for two days. Inbound updates stopped
+entirely while outbound sends kept working, so the bot looked alive from the
+group's side and only its *replies* went missing.
+
+So `daily-message` now calls `ensure_webhook()` (from
+`features/ensure_webhook/handler.py`) before it composes. That job is the
+only recurring wake-up left, and the instance is billable for its duration
+regardless, so the check costs one extra `getWebhookInfo` call per day and
+bounds a silent webhook loss at ~24h. A failed check is logged and stepped
+over — the daily message still goes out. The `daily-message-qa` variant
+passes `webhook_check=None`; on-demand QA must not mutate webhook
+registration.
+
+Telegram publishes no audit trail for webhook removal and documents no
+automatic removal, so the root cause of that incident is unproven. The
+heartbeat treats it as a recurring hazard rather than a one-off.
 
 ## File storage (#20)
 

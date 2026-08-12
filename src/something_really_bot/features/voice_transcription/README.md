@@ -1,10 +1,15 @@
-# Voice transcription (#43, #56)
+# Voice transcription (#43, #56, #63)
 
 Transcribes Telegram voice memos: downloads the file, stores it in
-GCS, transcribes via OpenAI `gpt-4o-transcribe`, optionally generates
+GCS, transcribes via OpenAI `gpt-transcribe`, optionally generates
 a 1-3 sentence summary + 1 sentence emotion read in a single chat
 call (only for memos over 2 minutes), and edits the in-flight
 "Transcribing…" ack with the final reply.
+
+Memos over 2 minutes also get roasted: a second chat call writes a
+<=100 word parody TL;DR in the speaker's own voice, TTS turns it into
+Ogg/Opus, and the bot posts it as a voice message replying to the
+original memo (#63).
 
 ## Flow
 
@@ -22,11 +27,16 @@ incoming voice message (private, group, supergroup)
         ├── jobs.update_status(id, "uploading")
         ├── gcs.upload at voice_transcription_requests/{chat}/{msg}/voice_{uniq}.ogg
         ├── jobs.update_status(id, "transcribing")
-        ├── openai.audio.transcriptions.create(model="gpt-4o-transcribe")
-        ├── if voice.duration > 120s:
+        ├── openai.audio.transcriptions.create(model="gpt-transcribe")
+        ├── if voice.duration > 120s:  # asyncio.gather, both at once
         │     ├── jobs.update_status(id, "analyzing")
-        │     └── openai.chat.completions.create with JSON response_format
-        │           → {"summary": "...", "emotion": "..."}
+        │     ├── openai.chat.completions.create with JSON response_format
+        │     │     → {"summary": "...", "emotion": "..."}
+        │     └── roast (#63), concurrently:
+        │           ├── openai.chat.completions.create (parody model)
+        │           │     → <=100 word TL;DR in the speaker's voice
+        │           └── openai.audio.speech.create(response_format="opus")
+        │                 → Ogg/Opus bytes
         ├── jobs.update_status(id, "sending")
         ├── if reply fits in 4096 chars:
         │     └── telegram.edit_message_text(ack_message_id, single reply)
@@ -34,6 +44,9 @@ incoming voice message (private, group, supergroup)
         │     ├── edit ack with summary/vibe + "split into N messages" notice
         │     └── send N transcript chunks as separate messages
         │           (last chunk ends with "End of transcript")
+        ├── if a roast survived:
+        │     ├── telegram.sendVoice(caption="Okay, well — the short version…")
+        │     └── gcs.upload at …/parody_{uniq}.ogg
         ├── jobs.mark_succeeded(...)
         └── persistence.record_event("voice_transcription_succeeded", ...)
 ```
@@ -52,9 +65,12 @@ Failure at any step:
 | Limit               | Value          | Rationale                                                    |
 | ------------------- | -------------- | ------------------------------------------------------------ |
 | Duration            | 10 min         | Operator preference. Telegram voice memos can technically go to 60 min. |
-| File size           | 25 MB          | Whisper / `gpt-4o-transcribe` request ceiling. 10 min of Opus voice is ~3-5 MB so this is defensive. |
+| File size           | 25 MB          | `gpt-transcribe` request ceiling. 10 min of Opus voice is ~3-5 MB so this is defensive. |
 | Transcribe timeout  | 60 s           | Whole-request OpenAI timeout.                                |
 | Analysis timeout    | 25 s           | Short chat call.                                             |
+| Parody timeout      | 30 s           | Chat call on a stronger model than the analysis one.         |
+| Speech timeout      | 45 s           | TTS renders audio, so it is slower than a text completion.   |
+| Parody length       | 900 chars      | Backstop on what reaches TTS; the prompt asks for <=100 words. Every character is billed and then spoken aloud. |
 
 Both caps short-circuit before the ack/reaction/background task — the
 user gets one clear rejection reply and that's it.
@@ -111,6 +127,40 @@ chunks are still delivered (partial delivery over total failure).
 The full transcript is always persisted to Postgres regardless of
 send outcome.
 
+## The roast (#63)
+
+Only for memos over `SHORT_DURATION_THRESHOLD_SECONDS` — the same
+threshold that gates the summary. Both read the transcript and neither
+needs the other's output, so they run under one `asyncio.gather`;
+serializing them would add a whole chat round-trip to the wait.
+
+Two calls: `openai_parody_model` writes the roast, `openai_tts_model`
+speaks it in `openai_tts_voice`. Defaults are `gpt-5.2`,
+`gpt-4o-mini-tts` and `marin`. The parody model is deliberately *not*
+`Settings.openai_model` — that one is shared with the chat fallback and
+OCR, and comic timing wants a stronger model than those need.
+
+The prompt asks for a first-person TL;DR performed as the speaker,
+under 100 words, keeping the actual point recognisable, mocking how and
+what they said but nothing about their appearance or identity. Output
+is plain text because it is spoken aloud verbatim. The TTS call carries
+its own `instructions` for delivery — a flat read kills the joke.
+
+`response_format="opus"` gives Ogg/Opus, which is exactly what
+`sendVoice` needs to render a real voice bubble instead of a file
+attachment.
+
+**The roast is garnish and fails like garnish.** `ParodyError`,
+`SpeechError`, a rejected `sendVoice`, a failed archive upload — each is
+logged and dropped, and the transcript reply goes out exactly as it
+would have. Nothing about the roast can produce a user-visible error,
+and a job whose roast died is still `succeeded`. If the *analysis* fails
+the roast is suppressed too: the user gets an error reply, and a
+punchline on top of that would be tone-deaf.
+
+Ordering is fixed: transcript first, roast second, replying to the
+original memo rather than to the transcript message.
+
 ## Error matrix
 
 | Failure                            | User-visible reply                                                                                              |
@@ -150,6 +200,8 @@ on first use). One row per attempt:
 | `transcript`                    | full transcript text                                           |
 | `summary` / `emotion`           | LLM output                                                     |
 | `telegram_reply_message_id`     | the bot's reply message id                                     |
+| `parody_text`                   | the roast that was spoken; `NULL` when it failed or was skipped |
+| `parody_gcs_object_path`        | archived roast audio; `NULL` when the send or upload failed    |
 | `error_class` / `error_message` | failure reason (message truncated at 2000 chars)               |
 | `created_at` / `updated_at`     | TIMESTAMPTZ                                                    |
 
@@ -171,7 +223,17 @@ None on top of what `#42` already required:
 
 * `OPENAI_API_KEY` is the existing secret. No new secrets.
 * No Terraform changes — Cloud Run resource bumps from #42 cover us.
-* Postgres wiring from #31 is reused.
+* Postgres wiring from #31 is reused. The two `parody_*` columns are
+  added by `ensure_table()` via `ADD COLUMN IF NOT EXISTS`, so the live
+  DB picks them up on the first memo after deploy — no migration step.
+* `OPENAI_PARODY_MODEL`, `OPENAI_TTS_MODEL` and `OPENAI_TTS_VOICE` are
+  plain env vars with working defaults; set them only to override.
+
+Note that group members must allow voice messages from the bot for the
+roast to be deliverable — Telegram rejects `sendVoice` with
+`VOICE_MESSAGES_FORBIDDEN` for users on the restricted setting. That is
+handled like any other roast failure: logged, dropped, transcript
+unaffected.
 
 ## Tests
 
@@ -179,7 +241,16 @@ None on top of what `#42` already required:
   rules across private/group/text, happy path in DM (ack + background
   ordering), happy path in group with correct chat_id/reply targeting,
   the four failure branches each route to the right user-visible
-  message, transcriber-missing edge case, ack-failure swallowed.
+  message, transcriber-missing edge case, ack-failure swallowed. For the
+  roast: ordering (transcript before roast), caption + reply target,
+  archive + persistence, short memos skipping it, parody/speech/send
+  failures each leaving the transcript untouched, analysis failure
+  suppressing it, and group delivery.
 * `tests/unit/features/test_voice_transcription_transcriber.py` —
   OpenAI wrapper: text-stripping, empty-text rejection, SDK errors
-  wrapped, JSON parsing, missing-field rejection, non-JSON rejection.
+  wrapped, JSON parsing, missing-field rejection, non-JSON rejection,
+  plus the roast call (own model, no JSON envelope, truncation, empty
+  and SDK-error paths) and the TTS call (model/voice/format/instructions,
+  empty-audio and SDK-error paths).
+* `tests/unit/telegram/test_client.py` — `sendVoice` multipart body,
+  `ok=false` and HTTP-error paths.
