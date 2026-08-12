@@ -13,6 +13,12 @@ already calls ``setWebhook`` after every revision, and a 15-minute ping
 kept an instance billable 24/7. Invoke it by hand when something looks
 broken — ``GET /jobs/ensure-webhook?token=…``. See
 ``docs/decisions/0003-manual-ensure-webhook.md``.
+
+The webhook half is also exposed as the standalone :func:`ensure_webhook`
+coroutine, which ``daily-message`` calls before it composes: that job
+already wakes an instance at 05:05 UTC, so the check rides along for
+free and caps a silent webhook loss at roughly one day instead of
+forever (#62).
 """
 
 from something_really_bot.logging import get_logger
@@ -22,6 +28,43 @@ from something_really_bot.routing.types import BotContext
 _logger = get_logger(__name__)
 
 
+async def ensure_webhook(ctx: BotContext) -> None:
+    """Point Telegram back at this service if the webhook drifted or vanished.
+
+    No-ops when the expected URL is already registered, and when either
+    ``cloud_run_url`` or the Telegram client is unavailable. Raises
+    whatever the Telegram client raises — callers that are not the
+    ``ensure-webhook`` job should decide for themselves whether a failed
+    check should abort their own work.
+    """
+    cloud_run_url = ctx.settings.cloud_run_url
+    if not cloud_run_url:
+        _logger.warning("ensure_webhook_no_cloud_run_url")
+        return
+
+    expected_url = f"{cloud_run_url.rstrip('/')}/webhook"
+
+    client = ctx.telegram_client
+    if client is None:
+        _logger.warning("ensure_webhook_no_telegram_client")
+        return
+
+    info = await client.get_webhook_info()
+    current_url = info.get("url", "")
+
+    if current_url == expected_url:
+        return
+
+    _logger.warning(
+        "ensure_webhook_fixing",
+        extra={"current_url": current_url or "(empty)", "expected_url": expected_url},
+    )
+
+    webhook_secret = ctx.settings.telegram_webhook_secret.get_secret_value()
+    await client.set_webhook(expected_url, secret_token=webhook_secret)
+    _logger.info("ensure_webhook_restored", extra={"url": expected_url})
+
+
 class EnsureWebhookJob:
     """Scheduled job: verify webhook and sync the command menu."""
 
@@ -29,36 +72,8 @@ class EnsureWebhookJob:
 
     async def run(self, ctx: BotContext) -> None:
         """Check the webhook and fix it if missing or wrong, then sync commands."""
-        await self._ensure_webhook(ctx)
+        await ensure_webhook(ctx)
         await self._sync_commands(ctx)
-
-    async def _ensure_webhook(self, ctx: BotContext) -> None:
-        cloud_run_url = ctx.settings.cloud_run_url
-        if not cloud_run_url:
-            _logger.warning("ensure_webhook_no_cloud_run_url")
-            return
-
-        expected_url = f"{cloud_run_url.rstrip('/')}/webhook"
-
-        client = ctx.telegram_client
-        if client is None:
-            _logger.warning("ensure_webhook_no_telegram_client")
-            return
-
-        info = await client.get_webhook_info()
-        current_url = info.get("url", "")
-
-        if current_url == expected_url:
-            return
-
-        _logger.warning(
-            "ensure_webhook_fixing",
-            extra={"current_url": current_url or "(empty)", "expected_url": expected_url},
-        )
-
-        webhook_secret = ctx.settings.telegram_webhook_secret.get_secret_value()
-        await client.set_webhook(expected_url, secret_token=webhook_secret)
-        _logger.info("ensure_webhook_restored", extra={"url": expected_url})
 
     async def _sync_commands(self, ctx: BotContext) -> None:
         client = ctx.telegram_client

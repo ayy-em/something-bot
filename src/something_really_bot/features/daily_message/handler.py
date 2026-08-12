@@ -9,12 +9,19 @@ group chat.
 Mon-Thu & Sat-Sun: weather, reunion, FX rate, on-this-day.
 Friday: all of the above + weekly website stats.
 
+Before composing anything the job re-points the Telegram webhook at this
+service if it drifted or vanished (#62). This is the only recurring wake-up
+the service has left, so it doubles as the webhook's heartbeat -- the check
+runs inside an instance that is billable regardless, which is the whole
+reason it lives here instead of on its own schedule.
+
 The job never raises -- failure to send is logged + persisted with
 ``success=false`` and the HTTP response stays 200 so Cloud Scheduler
-does not retry and double-send.
+does not retry and double-send. A failed webhook check is logged and
+stepped over: a deaf bot should still deliver its daily message.
 """
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 
 from something_really_bot.config import Settings
@@ -26,6 +33,7 @@ from something_really_bot.features.daily_message.sections.on_this_day import OnT
 from something_really_bot.features.daily_message.sections.reunion import ReunionSection
 from something_really_bot.features.daily_message.sections.weather import WeatherSection
 from something_really_bot.features.daily_message.sections.website_stats import WebsiteStatsSection
+from something_really_bot.features.ensure_webhook.handler import ensure_webhook
 from something_really_bot.logging import get_logger
 from something_really_bot.persistence import ResponseRecord
 from something_really_bot.routing.types import BotContext
@@ -55,9 +63,11 @@ class DailyMessageJob:
         sections: list[Section] | None = None,
         schedule: Schedule | None = None,
         now: Callable[[], datetime] | None = None,
+        webhook_check: Callable[[BotContext], Awaitable[None]] | None = ensure_webhook,
     ) -> None:
         self.name = name
         self._chat_id_override = chat_id_override
+        self._webhook_check = webhook_check
         self._composer = DailyMessageComposer(
             sections=sections or _default_sections(),
             schedule=schedule or Schedule.from_yaml(),
@@ -66,6 +76,8 @@ class DailyMessageJob:
 
     async def run(self, ctx: BotContext) -> None:
         """Execute the daily message job."""
+        await self._check_webhook(ctx)
+
         if self._chat_id_override is not None:
             chat_id = self._chat_id_override(ctx.settings)
         else:
@@ -77,6 +89,18 @@ class DailyMessageJob:
         today = self._now().date()
         text = await self._composer.compose(today)
         await self._send_and_persist(ctx, chat_id, text)
+
+    async def _check_webhook(self, ctx: BotContext) -> None:
+        """Restore the Telegram webhook if it drifted. Never raises."""
+        if self._webhook_check is None:
+            return
+        try:
+            await self._webhook_check(ctx)
+        except Exception as exc:  # noqa: BLE001 — the daily message still goes out
+            _logger.warning(
+                "daily_message_webhook_check_failed",
+                extra={"error": f"{type(exc).__name__}: {exc}"},
+            )
 
     async def _send_and_persist(self, ctx: BotContext, chat_id: int, text: str) -> None:
         sent_at = datetime.now(UTC)

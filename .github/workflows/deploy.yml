@@ -149,17 +149,26 @@ jobs:
           WEBHOOK_SECRET: ${{ steps.secrets.outputs.webhook_secret }}
         run: |
           set -eu
-          webhook_url="${{ steps.svc_url.outputs.url }}/webhook"
+          service_url="${{ steps.svc_url.outputs.url }}"
+          # An empty url= is how Telegram's API spells "delete the webhook",
+          # so never let an unresolved service URL reach setWebhook.
+          if [ -z "${service_url}" ]; then
+            echo "::error::Cloud Run URL did not resolve; refusing to call setWebhook." >&2
+            exit 1
+          fi
+          webhook_url="${service_url}/webhook"
           response=$(curl -sS -X POST \
             "https://api.telegram.org/bot${BOT_TOKEN}/setWebhook" \
             --data-urlencode "url=${webhook_url}" \
             --data-urlencode "secret_token=${WEBHOOK_SECRET}")
           ok=$(echo "${response}" | jq -r '.ok')
           if [ "${ok}" != "true" ]; then
-            echo "::warning::setWebhook after deploy failed: $(echo "${response}" | jq -r '.description // .')"
-          else
-            echo "Webhook restored to ${webhook_url}"
+            # A deploy that leaves the bot without a webhook is a dead bot,
+            # not a warning worth scrolling past.
+            echo "::error::setWebhook after deploy failed: $(echo "${response}" | jq -r '.description // .')" >&2
+            exit 1
           fi
+          echo "Webhook restored to ${webhook_url}"
 
       - name: Register Telegram command menu
         env:
