@@ -77,6 +77,32 @@ class Settings(BaseSettings):
         default="gpt-4o-mini",
         description="OpenAI chat model used by the fallback handler.",
     )
+    openai_parody_model: str = Field(
+        default="gpt-5.2",
+        description=(
+            "OpenAI chat model used for the voice-memo parody roast (#63). "
+            "Kept separate from ``openai_model`` on purpose: the roast wants "
+            "a strong model for comic timing, while the shared chat model "
+            "also drives the fallback handler and OCR."
+        ),
+    )
+    openai_tts_model: str = Field(
+        default="gpt-4o-mini-tts",
+        description=(
+            "OpenAI text-to-speech model used to vocalize the parody roast "
+            "(#63). Current recommended TTS model; ``tts-1`` / ``tts-1-hd`` "
+            "are the legacy alternatives."
+        ),
+    )
+    openai_tts_voice: str = Field(
+        default="marin",
+        description=(
+            "Voice for the parody roast (#63). ``gpt-4o-mini-tts`` offers "
+            "alloy, ash, ballad, coral, echo, fable, nova, onyx, sage, "
+            "shimmer, verse, marin, cedar; marin and cedar are the "
+            "highest-quality pair."
+        ),
+    )
     openai_context_bucket: str | None = Field(
         default="something-bot-openai-context",
         description=(

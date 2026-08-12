@@ -182,3 +182,54 @@ async def test_send_video_uploads_multipart(tmp_path) -> None:
     assert b"12" in body
     assert b"\x00\x01\x02\x03fake" in body
     assert result == {"message_id": 333}
+
+
+async def test_send_voice_posts_multipart_with_audio() -> None:
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["url"] = str(request.url)
+        captured["content_type"] = request.headers.get("content-type", "")
+        captured["body"] = request.content
+        return httpx.Response(200, json={"ok": True, "result": {"message_id": 55}})
+
+    client = _client_with_handler(handler)
+
+    result = await client.send_voice(
+        chat_id=-100,
+        voice_bytes=b"ogg-opus-payload",
+        filename="parody_abc.ogg",
+        caption="Okay, well:",
+        reply_to_message_id=11,
+    )
+
+    assert result == {"message_id": 55}
+    assert captured["url"].endswith("/sendVoice")
+    assert captured["content_type"].startswith("multipart/form-data")
+    body = captured["body"]
+    assert b"ogg-opus-payload" in body
+    assert b"parody_abc.ogg" in body
+    assert b"audio/ogg" in body
+    assert b"Okay, well:" in body
+    # reply_parameters is JSON-encoded for multipart requests.
+    assert b'"message_id": 11' in body
+
+
+async def test_send_voice_raises_on_not_ok() -> None:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"ok": False, "description": "VOICE_MESSAGES_FORBIDDEN"})
+
+    client = _client_with_handler(handler)
+
+    with pytest.raises(TelegramSendError):
+        await client.send_voice(chat_id=1, voice_bytes=b"x")
+
+
+async def test_send_voice_raises_on_http_error() -> None:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(413, json={"ok": False, "description": "too big"})
+
+    client = _client_with_handler(handler)
+
+    with pytest.raises(TelegramSendError):
+        await client.send_voice(chat_id=1, voice_bytes=b"x")

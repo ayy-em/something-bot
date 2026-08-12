@@ -87,3 +87,34 @@ by Cloud Scheduler is unchanged.
 Caveat: the token travels in the URL, so it lands in browser history and in
 Cloud Run request logs. It grants nothing beyond re-running a job, and
 rotating it is one `gcloud secrets versions add` plus a redeploy.
+
+## Update, 2026-08-12 (#62)
+
+The assumption in "Why" — that deploy-time `setWebhook` covers the failure
+mode the scheduled job was written for — held only for webhook loss *caused
+by* a revision swap. It did not hold in general.
+
+On 2026-08-10 the webhook disappeared between deploys. `getWebhookInfo`
+returned an empty `url` with no `last_error_message`; the last inbound
+update arrived 01:55Z and nothing came in for the following two days.
+Nothing in this repo calls `deleteWebhook` or long-polls, no workflow ran
+near that time, and the token still authenticated (so it was not revoked
+via BotFather), which leaves no explicit caller to blame. Telegram
+documents no automatic removal and exposes no audit trail. The one
+correlate is that project billing was disabled for most of 2026-08-09,
+during which Cloud Run failed every delivery.
+
+The outage was invisible because the failure is asymmetric: outbound sends
+kept working, so `daily-message` posted normally all three days while the
+bot answered nothing.
+
+**Amendment:** `daily-message` (05:05 UTC) now calls `ensure_webhook()`
+before composing. This does *not* reinstate a schedule for the job — it
+reuses a wake-up that already exists and is already billed, so the marginal
+cost is one `getWebhookInfo` call per day and the blind window drops from
+unbounded to ~24h. The `*/15` cadence stays dead.
+
+Also hardened: the deploy workflow's `setWebhook` step now fails the job
+instead of emitting `::warning::`, and refuses to run at all if the Cloud
+Run URL resolves empty — `url=` with an empty value is precisely how the
+Telegram API spells "delete the webhook".

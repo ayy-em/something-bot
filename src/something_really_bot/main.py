@@ -149,7 +149,8 @@ def build_default_job_registry() -> JobRegistry:
     ``infra/terraform/scheduler.tf``. Registration here does not imply a
     schedule: ``ensure-webhook`` is registered but deliberately has no
     ``locals.scheduled_jobs`` entry, and runs only when invoked by hand
-    (``GET /jobs/ensure-webhook?token=…``).
+    (``GET /jobs/ensure-webhook?token=…``). Its webhook check also runs
+    daily as the first step of ``daily-message`` (#62).
     """
     registry = JobRegistry()
     registry.register(TikTokReminderJob())
@@ -159,6 +160,9 @@ def build_default_job_registry() -> JobRegistry:
         DailyMessageJob(
             name="daily-message-qa",
             chat_id_override=lambda s: s.jm_chat_id,
+            # QA runs on demand and must not touch webhook registration —
+            # only the scheduled daily-message job carries that duty (#62).
+            webhook_check=None,
         )
     )
     return registry

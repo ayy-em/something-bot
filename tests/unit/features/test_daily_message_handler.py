@@ -931,3 +931,105 @@ async def test_run_duration_fetcher_failure_falls_back_to_no_duration() -> None:
 
     text = tg.sends[0]["text"]
     assert "13 days" in text
+
+
+# =============================================================================
+# Webhook check (#62)
+# =============================================================================
+
+
+async def test_run_checks_webhook_before_sending() -> None:
+    """The webhook check rides along on the only daily wake-up we have left."""
+    calls: list[str] = []
+    tg = _FakeTelegramClient()
+
+    async def _webhook_check(_ctx: BotContext) -> None:
+        calls.append("webhook")
+
+    schedule = _everyday_schedule("fx_rate")
+    job = DailyMessageJob(
+        sections=[FxRateSection(rate_fetcher=_rate_fetcher)],
+        schedule=schedule,
+        now=_fixed_now,
+        webhook_check=_webhook_check,
+    )
+
+    await job.run(_ctx(telegram_client=tg))
+
+    assert calls == ["webhook"]
+    assert len(tg.sends) == 1
+
+
+async def test_run_still_sends_when_webhook_check_raises() -> None:
+    """A deaf bot should still deliver its daily message."""
+    tg = _FakeTelegramClient()
+
+    async def _failing_check(_ctx: BotContext) -> None:
+        raise RuntimeError("Telegram 500")
+
+    schedule = _everyday_schedule("fx_rate")
+    job = DailyMessageJob(
+        sections=[FxRateSection(rate_fetcher=_rate_fetcher)],
+        schedule=schedule,
+        now=_fixed_now,
+        webhook_check=_failing_check,
+    )
+
+    await job.run(_ctx(telegram_client=tg))
+
+    assert len(tg.sends) == 1
+
+
+async def test_run_skips_webhook_check_when_disabled() -> None:
+    """The QA variant must not touch webhook registration."""
+    tg = _FakeTelegramClient()
+    schedule = _everyday_schedule("fx_rate")
+    job = DailyMessageJob(
+        name="daily-message-qa",
+        sections=[FxRateSection(rate_fetcher=_rate_fetcher)],
+        schedule=schedule,
+        now=_fixed_now,
+        webhook_check=None,
+    )
+
+    await job.run(_ctx(telegram_client=tg))
+
+    assert len(tg.sends) == 1
+
+
+async def test_webhook_check_restores_missing_webhook_end_to_end() -> None:
+    """Wired to the real check, an empty webhook url gets re-registered."""
+    recorded: list[dict[str, Any]] = []
+
+    @dataclass
+    class _WebhookAwareClient(_FakeTelegramClient):
+        async def get_webhook_info(self) -> dict[str, Any]:
+            return {"url": ""}
+
+        async def set_webhook(self, url: str, *, secret_token: str | None = None) -> dict[str, Any]:
+            recorded.append({"url": url, "secret_token": secret_token})
+            return {}
+
+    tg = _WebhookAwareClient()
+    ctx = BotContext(
+        settings=Settings.model_construct(
+            telegram_webhook_secret=SecretStr("x"),
+            telegram_bot_token=SecretStr("tok"),
+            telegram_qa_user_ids=frozenset(),
+            irindica_chat_id=None,
+            something_group_chat_id=GROUP_CHAT_ID,
+            jm_chat_id=None,
+            cloud_run_url="https://svc.run.app",
+        ),
+        telegram_client=tg,
+    )
+    job = DailyMessageJob(
+        sections=[FxRateSection(rate_fetcher=_rate_fetcher)],
+        schedule=_everyday_schedule("fx_rate"),
+        now=_fixed_now,
+    )
+
+    await job.run(ctx)
+
+    assert recorded == [{"url": "https://svc.run.app/webhook", "secret_token": "x"}]
+    assert len(tg.sends) == 1
