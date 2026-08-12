@@ -9,6 +9,7 @@ from pydantic import SecretStr
 
 from something_really_bot.features.voice_transcription.transcriber import (
     MAX_PARODY_CHARS,
+    MAX_PARODY_WORDS,
     Analysis,
     AnalysisError,
     ParodyError,
@@ -289,3 +290,39 @@ async def test_synthesize_sdk_error_wrapped() -> None:
 
     with pytest.raises(SpeechError):
         await transcriber.synthesize("hi")
+
+
+async def test_parody_is_trimmed_to_the_word_ceiling() -> None:
+    """The model reliably overshoots the number it is given, so code enforces it."""
+    long_reply = " ".join(["word"] * (MAX_PARODY_WORDS + 20)) + "."
+    transcriber, _, _ = _parody_client(chat=_chat_reply(long_reply))
+
+    result = await transcriber.parody("hi")
+
+    assert len(result.split()) <= MAX_PARODY_WORDS
+
+
+async def test_parody_trim_prefers_a_sentence_boundary() -> None:
+    """A clipped roast should still sound finished when spoken aloud."""
+    reply = " ".join(["word"] * 30) + ". " + " ".join(["extra"] * 30)
+    transcriber, _, _ = _parody_client(chat=_chat_reply(reply))
+
+    result = await transcriber.parody("hi")
+
+    assert result.endswith(".")
+    assert "extra" not in result
+
+
+async def test_parody_trim_falls_back_to_a_hard_cut() -> None:
+    """One long run-on has no boundary to cut on; the ceiling still holds."""
+    transcriber, _, _ = _parody_client(chat=_chat_reply(" ".join(["word"] * 90)))
+
+    result = await transcriber.parody("hi")
+
+    assert len(result.split()) == MAX_PARODY_WORDS
+
+
+async def test_parody_under_the_ceiling_is_untouched() -> None:
+    transcriber, _, _ = _parody_client(chat=_chat_reply("Short and mean. Done."))
+
+    assert await transcriber.parody("hi") == "Short and mean. Done."
