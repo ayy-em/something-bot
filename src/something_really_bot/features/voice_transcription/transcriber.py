@@ -49,10 +49,19 @@ SPEECH_TIMEOUT_SECONDS = 45.0
 # TTS output goes back out as a real voice message rather than a file
 # attachment.
 SPEECH_RESPONSE_FORMAT = "opus"
-# Hard ceiling on what we hand to TTS. The prompt asks for <=100 words;
-# this is the backstop for when the model gets carried away, since every
-# character is billed and then spoken aloud.
-MAX_PARODY_CHARS = 900
+# A 4-minute memo produced a roast that was a chore to sit through, so the
+# ceiling is deliberately brutal: this is a punchline, not a summary.
+#
+# The model does not respect the number it is given. Measured 2026-08-12
+# against gpt-5.2, 5 samples per setting: asking for 40 words returned
+# 44-49 every time; asking 30 returned 37-45; asking 25 returned 26-31.
+# So the prompt asks for PROMPT_WORD_TARGET and the code enforces
+# MAX_PARODY_WORDS, which is the limit that actually holds.
+PROMPT_WORD_TARGET = 25
+MAX_PARODY_WORDS = 40
+# Belt-and-braces on characters too — a reply of 40 very long words is
+# still billed and still spoken aloud.
+MAX_PARODY_CHARS = 400
 
 _ANALYSIS_SYSTEM_PROMPT = (
     "You analyze short voice-memo transcripts. Given a transcript, respond "
@@ -66,30 +75,62 @@ _ANALYSIS_SYSTEM_PROMPT = (
 
 
 _PARODY_SYSTEM_PROMPT = (
-    "You are a merciless impressionist. You receive the transcript of a "
-    "voice memo. Reply with a TL;DR of that memo performed *as* the "
-    "speaker: their voice, their verbal tics, their pet phrases, their "
-    "self-importance — dialled up until it collapses into self-parody.\n"
-    "Rules:\n"
-    "- Under 100 words. Shorter lands harder.\n"
-    "- First person, in character, start talking immediately.\n"
-    "- The actual point of the memo must stay recognisable. This is a "
-    "summary wearing a costume, not a non sequitur.\n"
-    "- Dry, ironic, over-exaggerated. Mock how they said it and what they "
-    "said, never their appearance, identity, or anything outside the memo.\n"
+    "You are a savage impressionist. You receive the transcript of a voice "
+    "memo. Perform its point back as the speaker — but as a caricature of "
+    "them: their tics, their favourite words, their absolute certainty, "
+    "cranked until it is ridiculous.\n"
+    "Technique:\n"
+    "- Open mid-thought, as if we caught you already rambling.\n"
+    "- Steal their actual verbal habits — filler words, pet phrases, the "
+    "one metaphor they were pleased with — and lean on them too hard.\n"
+    "- Inflate the stakes of whatever mundane thing they described until "
+    "the self-importance does the mocking for you.\n"
+    "- End on a flat, deflating line that admits what it was really about.\n"
+    "Hard rules:\n"
+    f"- {PROMPT_WORD_TARGET} words maximum. This is a punchline, not a "
+    "summary. Every word earns its place or gets cut.\n"
+    "- First person, in character, no warm-up.\n"
+    "- Mock what they said and how they said it. Never their appearance, "
+    "identity, intelligence, or anything outside this memo.\n"
     "- Reply in the transcript's language.\n"
     "- Plain text only: no markdown, no quotation marks, no stage "
     "directions, no preamble. Your entire reply is spoken aloud verbatim."
 )
 
-# The TTS model takes free-form direction on delivery; a flat read kills
-# the joke, so the performance note matters as much as the words.
+# The TTS model steers on accent, emotional range, intonation, impressions,
+# speed and tone — so the performance note is written along those axes
+# rather than as one adjective. A flat read kills the joke no matter how
+# good the words are.
 _SPEECH_INSTRUCTIONS = (
-    "Perform this as a theatrical, deadpan impression of the person who "
-    "said it: smug, over-confident, thoroughly delighted with yourself. "
-    "Lean into the irony. Slightly too fast, like you cannot wait to reach "
-    "your own punchline."
+    "Voice: a smug theatrical impressionist doing a merciless impersonation "
+    "of the person who recorded the original memo.\n"
+    "Delivery: wildly over-committed. Stretch the vowels on any word the "
+    "speaker was clearly proud of. Sneer lightly through the self-important "
+    "parts. Let a small, self-satisfied laugh colour the delivery.\n"
+    "Pacing: fast and impatient, tumbling downhill toward the punchline — "
+    "then a deliberate pause before the final line.\n"
+    "Intonation: swooping and melodramatic through the middle, collapsing "
+    "into flat, bored deadpan on the last sentence.\n"
+    "Emotion: enormous confidence, zero self-awareness."
 )
+
+
+def _trim_to_words(text: str, max_words: int) -> str:
+    """Enforce the word ceiling the model keeps overshooting.
+
+    Prefers to end on a sentence boundary so a clipped roast still sounds
+    finished when spoken. Falls back to a hard cut when the whole thing is
+    one long run-on.
+    """
+    words = text.split()
+    if len(words) <= max_words:
+        return text
+
+    budget = " ".join(words[:max_words])
+    boundary = max(budget.rfind(c) for c in ".!?…")
+    if boundary > 0:
+        return budget[: boundary + 1]
+    return budget
 
 
 class TranscriptionError(Exception):
@@ -244,7 +285,7 @@ class VoiceTranscriber:
         content = getattr(choices[0].message, "content", None)
         if not isinstance(content, str) or not content.strip():
             raise ParodyError("Parody returned empty content")
-        return content.strip()[:MAX_PARODY_CHARS]
+        return _trim_to_words(content.strip(), MAX_PARODY_WORDS)[:MAX_PARODY_CHARS]
 
     async def synthesize(self, text: str) -> bytes:
         """One TTS call → Ogg/Opus audio bytes for Telegram's sendVoice."""

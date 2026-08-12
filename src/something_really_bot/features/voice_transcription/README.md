@@ -7,7 +7,7 @@ call (only for memos over 2 minutes), and edits the in-flight
 "Transcribing…" ack with the final reply.
 
 Memos over 2 minutes also get roasted: a second chat call writes a
-<=100 word parody TL;DR in the speaker's own voice, TTS turns it into
+~25 word parody TL;DR in the speaker's own voice, TTS turns it into
 Ogg/Opus, and the bot posts it as a voice message replying to the
 original memo (#63).
 
@@ -34,7 +34,7 @@ incoming voice message (private, group, supergroup)
         │     │     → {"summary": "...", "emotion": "..."}
         │     └── roast (#63), concurrently:
         │           ├── openai.chat.completions.create (parody model)
-        │           │     → <=100 word TL;DR in the speaker's voice
+        │           │     → ~25 word TL;DR in the speaker's voice
         │           └── openai.audio.speech.create(response_format="opus")
         │                 → Ogg/Opus bytes
         ├── jobs.update_status(id, "sending")
@@ -70,7 +70,8 @@ Failure at any step:
 | Analysis timeout    | 25 s           | Short chat call.                                             |
 | Parody timeout      | 30 s           | Chat call on a stronger model than the analysis one.         |
 | Speech timeout      | 45 s           | TTS renders audio, so it is slower than a text completion.   |
-| Parody length       | 900 chars      | Backstop on what reaches TTS; the prompt asks for <=100 words. Every character is billed and then spoken aloud. |
+| Parody words        | 40             | Enforced in code by `_trim_to_words`, preferring a sentence boundary. The prompt asks for 25 — see below. |
+| Parody length       | 400 chars      | Second backstop; 40 very long words is still billed and still spoken aloud. |
 
 Both caps short-circuit before the ack/reaction/background task — the
 user gets one clear rejection reply and that's it.
@@ -141,10 +142,31 @@ speaks it in `openai_tts_voice`. Defaults are `gpt-5.2`,
 OCR, and comic timing wants a stronger model than those need.
 
 The prompt asks for a first-person TL;DR performed as the speaker,
-under 100 words, keeping the actual point recognisable, mocking how and
-what they said but nothing about their appearance or identity. Output
-is plain text because it is spoken aloud verbatim. The TTS call carries
-its own `instructions` for delivery — a flat read kills the joke.
+keeping the actual point recognisable, mocking how and what they said
+but nothing about their appearance or identity. Output is plain text
+because it is spoken aloud verbatim.
+
+**The word cap is enforced twice, because the model ignores the number
+it is given.** Measured 2026-08-12 against `gpt-5.2`, 5 samples per
+setting on the same transcript:
+
+| Prompt asks for | Words returned | Over 40 |
+| --- | --- | --- |
+| 40 | 44, 44, 48, 49, 49 | 5/5 |
+| 30 | 37, 37, 39, 40, 45 | 1/5 |
+| 25 | 26, 27, 28, 29, 31 | 0/5 |
+
+So `PROMPT_WORD_TARGET = 25` goes in the prompt and `MAX_PARODY_WORDS =
+40` is enforced by `_trim_to_words`, which prefers to cut on a sentence
+boundary so a clipped roast still sounds finished. Typical output is
+~27 words / ~160 chars, about six seconds of audio. The first version
+shipped at 100 words and produced a ~20 second clip that was a chore to
+sit through.
+
+The TTS call carries its own `instructions`, written along the axes the
+model actually steers on — voice, delivery, pacing, intonation, emotion
+— rather than as a single adjective. A flat read kills the joke no
+matter how good the words are.
 
 `response_format="opus"` gives Ogg/Opus, which is exactly what
 `sendVoice` needs to render a real voice bubble instead of a file
