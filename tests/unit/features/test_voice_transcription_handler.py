@@ -578,6 +578,30 @@ async def test_download_failure_replies_user_error() -> None:
     assert jobs.failed[0]["error_class"] == "TelegramFileError"
 
 
+async def test_unexpected_exception_does_not_escape_the_background_task() -> None:
+    """The backstop: an error nothing maps still reaches the user."""
+    telegram = _FakeTelegram(get_file_raises=RuntimeError("kaboom"))
+    gcs = _FakeGCS()
+    transcriber = _FakeTranscriber()
+    jobs = _FakeJobStorage()
+    scheduled: list[Any] = []
+    handler = _build_handler(
+        telegram=telegram,
+        gcs=gcs,
+        transcriber=transcriber,
+        jobs=jobs,
+        scheduler=lambda c: scheduled.append(c),
+    )
+
+    await handler.handle(_private_voice_msg(), _ctx())
+    # Must not raise: nothing awaits this task in production.
+    await scheduled[0]
+
+    assert len(telegram.edited_messages) == 1
+    assert "Something went wrong" in telegram.edited_messages[0]["text"]
+    assert not transcriber.transcripts
+
+
 async def test_transcription_failure_replies_user_error() -> None:
     telegram = _FakeTelegram()
     gcs = _FakeGCS()

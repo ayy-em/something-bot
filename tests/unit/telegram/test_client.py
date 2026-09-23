@@ -6,7 +6,18 @@ import httpx
 import pytest
 from pydantic import SecretStr
 
-from something_really_bot.telegram.client import TelegramClient, TelegramSendError
+from something_really_bot.telegram import client as client_module
+from something_really_bot.telegram.client import (
+    TelegramClient,
+    TelegramFileError,
+    TelegramSendError,
+)
+
+
+@pytest.fixture(autouse=True)
+def _no_retry_backoff(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep the retry tests fast — the sleep is not what we are testing."""
+    monkeypatch.setattr(client_module, "_RETRY_BACKOFF_SECONDS", 0)
 
 
 def _client_with_handler(handler) -> TelegramClient:
@@ -233,3 +244,97 @@ async def test_send_voice_raises_on_http_error() -> None:
 
     with pytest.raises(TelegramSendError):
         await client.send_voice(chat_id=1, voice_bytes=b"x")
+
+
+async def test_send_message_wraps_transport_error() -> None:
+    """A read timeout surfaces as TelegramSendError, not raw httpx."""
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("")
+
+    client = _client_with_handler(handler)
+
+    with pytest.raises(TelegramSendError) as excinfo:
+        await client.send_message(chat_id=1, text="x")
+
+    assert "ReadTimeout" in str(excinfo.value)
+    assert "sendMessage" in str(excinfo.value)
+
+
+async def test_get_file_path_wraps_transport_error_after_retries() -> None:
+    """The 2026-09-23 outage: getFile hung, the raw ReadTimeout escaped."""
+    calls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(str(request.url))
+        raise httpx.ReadTimeout("")
+
+    client = _client_with_handler(handler)
+
+    with pytest.raises(TelegramFileError) as excinfo:
+        await client.get_file_path("file-abc")
+
+    assert len(calls) == client_module._FILE_ATTEMPTS
+    assert "ReadTimeout" in str(excinfo.value)
+
+
+async def test_get_file_path_retries_then_succeeds() -> None:
+    attempts: list[int] = []
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        attempts.append(1)
+        if len(attempts) < 2:
+            raise httpx.ConnectError("")
+        return httpx.Response(200, json={"ok": True, "result": {"file_path": "voice/f.oga"}})
+
+    client = _client_with_handler(handler)
+
+    assert await client.get_file_path("file-abc") == "voice/f.oga"
+    assert len(attempts) == 2
+
+
+async def test_download_file_retries_then_succeeds() -> None:
+    attempts: list[int] = []
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        attempts.append(1)
+        if len(attempts) < 2:
+            raise httpx.ReadTimeout("")
+        return httpx.Response(200, content=b"audio-bytes")
+
+    client = _client_with_handler(handler)
+
+    assert await client.download_file("voice/f.oga") == b"audio-bytes"
+    assert len(attempts) == 2
+
+
+async def test_sends_are_not_retried() -> None:
+    """Sends are not idempotent: one attempt, then fail."""
+    attempts: list[int] = []
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        attempts.append(1)
+        raise httpx.ReadTimeout("")
+
+    client = _client_with_handler(handler)
+
+    with pytest.raises(TelegramSendError):
+        await client.send_message(chat_id=1, text="x")
+
+    assert len(attempts) == 1
+
+
+async def test_transport_error_never_leaks_the_token(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("")
+
+    client = _client_with_handler(handler)
+
+    with caplog.at_level("WARNING"), pytest.raises(TelegramFileError) as excinfo:
+        await client.get_file_path("file-abc")
+
+    assert "super-secret-token" not in str(excinfo.value)
+    for record in caplog.records:
+        assert "super-secret-token" not in record.getMessage()

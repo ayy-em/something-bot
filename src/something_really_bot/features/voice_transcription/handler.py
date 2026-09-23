@@ -225,7 +225,28 @@ class VoiceTranscriptionHandler:
 
 
 async def _run_background(ctx: _BackgroundContext) -> None:
-    """Download → upload → transcribe → analyze → send. Never raises."""
+    """Run the pipeline, and make "never raises" actually true.
+
+    Nothing awaits this task, so an exception escaping it is invisible
+    apart from asyncio's "Task exception was never retrieved" — the user
+    keeps the "transcribing…" ack forever and the job row is stranded
+    mid-flight. The pipeline maps every failure it knows about to a
+    user-facing message; this is the backstop for the ones it does not.
+    """
+    try:
+        await _transcribe_and_reply(ctx)
+    except Exception:  # noqa: BLE001 — last line of defence for a fire-and-forget task
+        _logger.exception(
+            "voice_transcription_background_crashed",
+            extra={"chat_id": ctx.chat_id, "message_id": ctx.message_id},
+        )
+        # Best effort: anything at all beats a reply that never comes.
+        with contextlib.suppress(Exception):
+            await _deliver_replies(ctx, [_ERROR_GENERIC], parse_mode=None)
+
+
+async def _transcribe_and_reply(ctx: _BackgroundContext) -> None:
+    """Download → upload → transcribe → analyze → send."""
     job_id: int | None = None
     if ctx.job_storage is not None:
         try:

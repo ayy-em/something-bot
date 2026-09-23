@@ -10,6 +10,7 @@ Bot token is held as :class:`SecretStr` and only unwrapped inside the URL
 that goes to ``api.telegram.org``. The token never appears in log records.
 """
 
+import asyncio
 import json
 from functools import lru_cache
 from pathlib import Path
@@ -28,10 +29,21 @@ _DEFAULT_TIMEOUT = httpx.Timeout(connect=5.0, read=10.0, write=10.0, pool=10.0)
 # sendVideo can take a while for 30–50 MB uploads; the default 10s read
 # timeout would 504 us before Telegram acks.
 _UPLOAD_TIMEOUT = httpx.Timeout(connect=5.0, read=120.0, write=120.0, pool=10.0)
+# Downloads pull the whole voice memo / video body over one read; 10s was
+# enough for small voice notes but leaves no headroom for a multi-MB file
+# on a slow Telegram CDN edge.
+_DOWNLOAD_TIMEOUT = httpx.Timeout(connect=5.0, read=60.0, write=10.0, pool=10.0)
+# getFile and the download that follows it are idempotent reads, so a
+# transient stall is worth retrying. Telegram hung on getFile for >10s in
+# a burst on 2026-09-23 and every voice memo in that window was lost.
+# Sends are NOT retried: they are not idempotent, and multipart bodies
+# cannot be replayed once the file object has been consumed.
+_FILE_ATTEMPTS = 3
+_RETRY_BACKOFF_SECONDS = 0.5
 
 
 class TelegramSendError(Exception):
-    """Raised when Telegram returns a non-OK response from sendMessage."""
+    """Raised when a send call fails: non-OK response, or transport error."""
 
 
 class TelegramFileError(Exception):
@@ -470,10 +482,17 @@ class TelegramClient:
         for downloads.
 
         Raises:
-            TelegramFileError: getFile failed or returned no path.
+            TelegramFileError: getFile failed, timed out, or returned no
+                path.
         """
         url = f"{self._base_url}/bot{self._token.get_secret_value()}/getFile"
-        response = await self._request("POST", url, json={"file_id": file_id})
+        response = await self._request(
+            "POST",
+            url,
+            json={"file_id": file_id},
+            error_cls=TelegramFileError,
+            attempts=_FILE_ATTEMPTS,
+        )
 
         if response.status_code >= 400:
             _logger.warning(
@@ -496,10 +515,16 @@ class TelegramClient:
         returned from :meth:`get_file_path`).
 
         Raises:
-            TelegramFileError: download failed.
+            TelegramFileError: download failed or timed out.
         """
         url = f"{self._base_url}/file/bot{self._token.get_secret_value()}/{file_path}"
-        response = await self._request("GET", url)
+        response = await self._request(
+            "GET",
+            url,
+            timeout=_DOWNLOAD_TIMEOUT,
+            error_cls=TelegramFileError,
+            attempts=_FILE_ATTEMPTS,
+        )
 
         if response.status_code >= 400:
             _logger.warning(
@@ -510,12 +535,58 @@ class TelegramClient:
 
         return response.content
 
-    async def _request(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
-        if self._http is not None:
-            return await self._http.request(method, url, **kwargs)
+    async def _request(
+        self,
+        method: str,
+        url: str,
+        *,
+        error_cls: type[Exception] = TelegramSendError,
+        attempts: int = 1,
+        **kwargs: Any,
+    ) -> httpx.Response:
+        """Perform one Telegram API call, translating transport failures.
+
+        httpx raises ``ReadTimeout``/``ConnectError``/... straight out of
+        the transport. Those used to escape the client untouched and, in
+        the voice pipeline, killed the background task without ever
+        reaching a handler's ``except`` — the user was left staring at a
+        "transcribing…" ack forever. Everything the transport can raise
+        now comes back out as ``error_cls`` so callers only ever have to
+        know about our own two exception types.
+
+        Raises:
+            error_cls: the request failed at the transport level on every
+                attempt.
+        """
         timeout = kwargs.pop("timeout", _DEFAULT_TIMEOUT)
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            return await client.request(method, url, **kwargs)
+        # Last path segment: the API method name, or the downloaded file
+        # name. Never the token, which sits earlier in the path.
+        operation = url.rsplit("/", 1)[-1]
+        last_exc: httpx.HTTPError | None = None
+
+        for attempt in range(1, attempts + 1):
+            try:
+                if self._http is not None:
+                    return await self._http.request(method, url, **kwargs)
+                async with httpx.AsyncClient(timeout=timeout) as client:
+                    return await client.request(method, url, **kwargs)
+            except httpx.HTTPError as exc:
+                last_exc = exc
+                _logger.warning(
+                    "telegram_transport_error",
+                    extra={
+                        "operation": operation,
+                        "exception_type": type(exc).__name__,
+                        "attempt": attempt,
+                        "attempts": attempts,
+                    },
+                )
+                if attempt < attempts:
+                    await asyncio.sleep(_RETRY_BACKOFF_SECONDS * attempt)
+
+        raise error_cls(
+            f"{operation} transport error after {attempts} attempt(s): {type(last_exc).__name__}"
+        ) from last_exc
 
 
 @lru_cache(maxsize=1)
