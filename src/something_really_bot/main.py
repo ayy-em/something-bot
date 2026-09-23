@@ -51,6 +51,9 @@ from something_really_bot.features.tiktok_reminder.handler import TikTokReminder
 from something_really_bot.features.video_downloader.handler import (
     get_video_downloader_handler,
 )
+from something_really_bot.features.voice_transcription.backfill import (
+    VoiceTranscriptionBackfillJob,
+)
 from something_really_bot.features.voice_transcription.handler import (
     get_voice_transcription_handler,
 )
@@ -155,6 +158,10 @@ def build_default_job_registry() -> JobRegistry:
     registry = JobRegistry()
     registry.register(TikTokReminderJob())
     registry.register(EnsureWebhookJob())
+    # Also unscheduled: re-runs voice memos whose background task died
+    # mid-flight. Invoke by hand after an outage
+    # (``GET /jobs/voice-transcription-backfill?token=…``).
+    registry.register(VoiceTranscriptionBackfillJob())
     registry.register(DailyMessageJob())
     registry.register(
         DailyMessageJob(

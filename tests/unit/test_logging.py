@@ -19,7 +19,12 @@ from something_really_bot.logging import (
     StructuredJsonFormatter,
     configure_logging,
     get_logger,
+    redact_secrets,
 )
+
+# Shaped like a real Telegram bot token, but not one: the id is the
+# documented placeholder range and the secret half is typed here.
+_FAKE_TOKEN = "bot1234567890:AAF-fake-token-value-not-a-real-secret-x"
 
 
 @pytest.fixture(autouse=True)
@@ -142,3 +147,70 @@ def test_get_logger_writes_json_line_to_stderr() -> None:
     assert payload["severity"] == "INFO"
     assert payload["message"] == "ping"
     assert payload["update_id"] == 7
+
+
+def test_redacts_telegram_token_in_message() -> None:
+    """httpx logs every request line at INFO; the token sat in the URL."""
+    payload = _format(
+        {
+            "name": "httpx",
+            "level": logging.INFO,
+            "msg": (
+                f"HTTP Request: POST https://api.telegram.org/{_FAKE_TOKEN}/getFile "
+                '"HTTP/1.1 200 OK"'
+            ),
+        }
+    )
+
+    assert "AAF-fake-token-value" not in payload["message"]
+    assert "bot1234567890:<redacted>" in payload["message"]
+    # The useful half of the line survives.
+    assert "/getFile" in payload["message"]
+    assert "200 OK" in payload["message"]
+
+
+def test_redacts_token_in_extras() -> None:
+    payload = _format(
+        {
+            "name": "foo",
+            "level": logging.WARNING,
+            "msg": "telegram_transport_error",
+            "extra": {"url": f"https://api.telegram.org/{_FAKE_TOKEN}/sendMessage"},
+        }
+    )
+
+    assert "AAF-fake-token-value" not in json.dumps(payload)
+    assert "<redacted>" in payload["url"]
+
+
+def test_redacts_token_in_exception_text() -> None:
+    try:
+        raise RuntimeError(f"failed calling https://api.telegram.org/{_FAKE_TOKEN}/getFile")
+    except RuntimeError:
+        import sys
+
+        exc_info = sys.exc_info()
+
+    payload = _format({"name": "foo", "level": logging.ERROR, "msg": "oops", "exc_info": exc_info})
+
+    assert "AAF-fake-token-value" not in payload["exception"]
+    assert "<redacted>" in payload["exception"]
+
+
+def test_redacts_openai_style_key() -> None:
+    payload = _format(
+        {
+            "name": "foo",
+            "level": logging.INFO,
+            "msg": "using key sk-notarealkey0000000000000000000000",
+        }
+    )
+
+    assert "notarealkey" not in payload["message"]
+    assert "sk-<redacted>" in payload["message"]
+
+
+def test_redact_secrets_leaves_ordinary_text_alone() -> None:
+    text = "no secrets here: bot42 sk-short /getFile 200 OK"
+
+    assert redact_secrets(text) == text

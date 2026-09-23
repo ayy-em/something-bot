@@ -8,6 +8,10 @@ in log filters and usable as labels for log-based metrics.
 
 Reference: https://cloud.google.com/logging/docs/structured-logging
 
+Every rendered line passes through :func:`redact_secrets` on the way
+out, so a credential that reaches a log record — the Telegram bot token
+in an httpx request line, say — is masked before it hits stdout.
+
 Loggers in this project always call ``get_logger(__name__).<level>(msg, extra={...})``;
 the ``extra`` dict is merged into the JSON payload. Reserved Python
 ``LogRecord`` attributes are excluded automatically so callers never
@@ -17,7 +21,26 @@ have to think about clashes.
 import json
 import logging
 import os
+import re
 from typing import Any
+
+# Credentials that leak into log lines nobody writes by hand. httpx logs
+# every request at INFO, and the Telegram bot token lives in the URL path
+# (``/bot<id>:<secret>/sendMessage``) — which put the live token into
+# Cloud Logging on every single call. The numeric bot id is kept: it is
+# not secret and it identifies which bot made the call.
+_REDACTIONS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"bot(\d{6,}):[A-Za-z0-9_-]{20,}"), r"bot\1:<redacted>"),
+    (re.compile(r"\bsk-[A-Za-z0-9_-]{20,}"), "sk-<redacted>"),
+)
+
+
+def redact_secrets(text: str) -> str:
+    """Mask known credential shapes in an outbound log line."""
+    for pattern, replacement in _REDACTIONS:
+        text = pattern.sub(replacement, text)
+    return text
+
 
 _SEVERITY_BY_LEVELNAME: dict[str, str] = {
     "DEBUG": "DEBUG",
@@ -86,7 +109,10 @@ class StructuredJsonFormatter(logging.Formatter):
             payload["exception"] = self.formatException(record.exc_info)
         if record.stack_info:
             payload["stack"] = self.formatStack(record.stack_info)
-        return json.dumps(payload, default=str)
+        # Redact the serialized line rather than each field: one pass
+        # covers the message, the exception text, and anything a caller
+        # tucked into ``extra=`` without having to walk nested values.
+        return redact_secrets(json.dumps(payload, default=str))
 
 
 _DEFAULT_LEVEL = "INFO"

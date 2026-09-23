@@ -24,6 +24,7 @@ from typing import Any
 
 from something_really_bot.features.voice_transcription.storage import (
     JobRow,
+    StuckJob,
     VoiceJobStorage,
 )
 from something_really_bot.features.voice_transcription.transcriber import (
@@ -123,6 +124,10 @@ class _BackgroundContext:
     # ``None`` the edit path is skipped and we fall back to a fresh
     # ``send_message``.
     ack_message_id: int | None = None
+    # Set by the backfill job when re-running a row that already exists:
+    # the pipeline then updates that row in place instead of inserting a
+    # second one for the same memo.
+    existing_job_id: int | None = None
 
 
 class VoiceTranscriptionHandler:
@@ -245,10 +250,50 @@ async def _run_background(ctx: _BackgroundContext) -> None:
             await _deliver_replies(ctx, [_ERROR_GENERIC], parse_mode=None)
 
 
+async def rerun_stuck_job(
+    stuck: StuckJob,
+    *,
+    telegram_client: TelegramClient,
+    gcs_storage: GCSStorage,
+    transcriber: VoiceTranscriber | None,
+    job_storage: VoiceJobStorage,
+    persistence_record_event: Callable[[EventRecord], None] | None = None,
+) -> None:
+    """Run the pipeline again for a row that stalled, updating it in place.
+
+    Used by the backfill job. The original "transcribing…" ack is still
+    sitting in the chat but its message id was never stored, so the reply
+    goes out as a fresh message replying to the original voice memo
+    rather than an edit.
+    """
+    row = stuck.row
+    ctx = _BackgroundContext(
+        bot_id=row.bot_id,
+        chat_id=row.chat_id,
+        user_id=row.user_id,
+        message_id=row.message_id,
+        voice=Voice(
+            file_id=row.telegram_file_id,
+            file_unique_id=row.telegram_file_unique_id,
+            duration=row.duration_seconds,
+            mime_type=row.mime_type,
+            file_size=row.file_size_bytes,
+        ),
+        telegram_client=telegram_client,
+        gcs_storage=gcs_storage,
+        transcriber=transcriber,
+        job_storage=job_storage,
+        persistence_record_event=persistence_record_event,
+        ack_message_id=None,
+        existing_job_id=stuck.job_id,
+    )
+    await _run_background(ctx)
+
+
 async def _transcribe_and_reply(ctx: _BackgroundContext) -> None:
     """Download → upload → transcribe → analyze → send."""
-    job_id: int | None = None
-    if ctx.job_storage is not None:
+    job_id: int | None = ctx.existing_job_id
+    if ctx.job_storage is not None and job_id is None:
         try:
             job_id = await ctx.job_storage.insert_pending(
                 JobRow(
