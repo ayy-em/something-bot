@@ -61,8 +61,13 @@ variable "cloudrun_settings" {
     # buffer plus ffmpeg muxing peaks well under 1 GiB, and the longer
     # timeout plus reduced concurrency (#42) still keep one in-flight
     # download from starving other webhook traffic.
+    # Memory back to 2 GiB for /make_sticker (#44): rembg peaks at ~550 MB
+    # on top of the app, and with concurrency 8 a sticker plus a video
+    # download could OOM the instance and take every in-flight job with
+    # it. Memory is ~10% of the instance rate, so this is +10%, not 2x.
+    # Review latency/cost/OOMs on 2026-11-02 (BACKLOG.md).
     cpu             = "1"
-    memory          = "1Gi"
+    memory          = "2Gi"
     timeout_seconds = 300
     concurrency     = 8
     min_instances   = 0

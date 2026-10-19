@@ -78,11 +78,17 @@ Measured on 1 vCPU, CPU memory arena off (on top of the ~100 MB app):
 | `isnet-general-use` | 179 MB | 627 MB | 1.17 GB |
 | `u2netp` | 4.7 MB | 293 MB | 548 MB |
 
-The service runs on 1 GiB (see `infra/terraform/variables.tf`), so only
-`u2netp` fits. Cut-out quality on portraits and objects is close to
-`u2net`; it is rougher on busy backgrounds. Switching models means
-changing `REMBG_MODEL`, the session class in the Dockerfile (a unit test
-keeps them in sync), and almost certainly the instance memory.
+The service runs on 2 GiB (`infra/terraform/variables.tf`), shared with
+yt-dlp/ffmpeg at concurrency 8, so `u2netp` keeps real headroom where
+`u2net` would eat half the instance. Cut-out quality on portraits and
+objects is close to `u2net`; it is rougher on busy backgrounds. Switching
+models means changing `REMBG_MODEL` and the session class in the
+Dockerfile (a unit test keeps them in sync). Whether to switch is a
+review item for 2026-11-02 (see `BACKLOG.md`).
+
+Every sticker logs one `make_sticker_finished` line with `outcome`,
+`total_ms`, `transform_ms` and `process_peak_rss_mb` (process lifetime
+high-water mark), which is what that review reads.
 
 Memory controls in code:
 

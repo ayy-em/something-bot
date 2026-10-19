@@ -38,15 +38,16 @@ FIT_DIMENSION = MAX_DIMENSION - 2 * OUTLINE_PX
 _OUTLINE_ALPHA_THRESHOLD = 128
 
 # ``u2netp`` rather than rembg's default ``u2net``: the full model peaks
-# at ~950 MB RSS on its own (measured, CPU arena off), which does not fit
-# next to the app on the 1 GiB Cloud Run instance. ``u2netp`` peaks at
-# ~550 MB with visibly similar cut-outs on portraits and objects. Pinned,
-# not a setting: the Dockerfile bakes exactly this model into the image,
-# so changing it is a code + image change either way.
+# at ~950 MB RSS on its own (measured, CPU arena off) vs ~550 MB, with
+# visibly similar cut-outs on portraits and objects. The instance has
+# 2 GiB, but it also runs yt-dlp/ffmpeg at concurrency 8; whether u2net's
+# quality is worth that headroom is a 2026-11-02 review item (BACKLOG.md).
+# Pinned, not a setting: the Dockerfile bakes exactly this model into the
+# image, so changing it is a code + image change either way.
 REMBG_MODEL = "u2netp"
 
 # One inference at a time. Each run allocates a few hundred MB of
-# activations; two concurrent stickers on a 1 GiB instance is an OOM.
+# activations; concurrent stickers next to a video download is an OOM.
 _REMBG_LOCK = threading.Lock()
 
 BackgroundRemover = Callable[[Image.Image], Image.Image]

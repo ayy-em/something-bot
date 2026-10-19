@@ -15,6 +15,8 @@ replies with the PNG as a sendDocument (no Telegram re-compression).
 """
 
 import asyncio
+import resource
+import time
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -261,6 +263,8 @@ async def _run_background(ctx: _BackgroundContext) -> None:
     image_bytes: bytes | None = None
     sticker_bytes: bytes | None = None
     received_at = datetime.now(UTC)
+    started = time.monotonic()
+    transform_ms: int | None = None
 
     try:
         file_path = await ctx.telegram_client.get_file_path(ctx.image.file_id)
@@ -290,8 +294,10 @@ async def _run_background(ctx: _BackgroundContext) -> None:
 
     if user_facing_error is None and image_bytes is not None:
         try:
+            transform_started = time.monotonic()
             sticker = await transform(image_bytes, remove_background=ctx.background_remover)
             sticker_bytes = sticker.png_bytes
+            transform_ms = round((time.monotonic() - transform_started) * 1000)
         except NoSubjectError as exc:
             error_class = type(exc).__name__
             error_message = str(exc)
@@ -332,6 +338,7 @@ async def _run_background(ctx: _BackgroundContext) -> None:
             error_message = str(exc)
             user_facing_error = _ERROR_GENERIC
 
+    _log_timing(ctx, started=started, transform_ms=transform_ms, error_class=error_class)
     if user_facing_error is None:
         _record_event(
             ctx,
@@ -356,6 +363,31 @@ async def _run_background(ctx: _BackgroundContext) -> None:
         status="error",
         details=f"{error_class}: {error_message}",
         occurred_at=datetime.now(UTC),
+    )
+
+
+def _log_timing(
+    ctx: _BackgroundContext,
+    *,
+    started: float,
+    transform_ms: int | None,
+    error_class: str | None,
+) -> None:
+    """One structured line per sticker, for the latency / memory review.
+
+    ``process_peak_rss_mb`` is the process-lifetime high-water mark (Linux
+    reports ``ru_maxrss`` in KiB), so the first sticker after a cold start
+    shows what rembg costs on top of the app.
+    """
+    _logger.info(
+        "make_sticker_finished",
+        extra={
+            "chat_id": ctx.chat_id,
+            "outcome": error_class or "success",
+            "total_ms": round((time.monotonic() - started) * 1000),
+            "transform_ms": transform_ms,
+            "process_peak_rss_mb": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss // 1024,
+        },
     )
 
 
