@@ -1,0 +1,56 @@
+{
+  "update_id": 100000020,
+  "message": {
+    "message_id": 31,
+    "date": 1715850020,
+    "chat": {
+      "id": -751519857,
+      "type": "group",
+      "title": "Test group chat"
+    },
+    "from": {
+      "id": 135499785,
+      "is_bot": false,
+      "first_name": "Test",
+      "username": "test_user"
+    },
+    "text": "/make_sticker@SomethingReallyBot",
+    "entities": [
+      {
+        "type": "bot_command",
+        "offset": 0,
+        "length": 32
+      }
+    ],
+    "reply_to_message": {
+      "message_id": 30,
+      "date": 1715850019,
+      "chat": {
+        "id": -751519857,
+        "type": "group",
+        "title": "Test group chat"
+      },
+      "from": {
+        "id": 135499786,
+        "is_bot": false,
+        "first_name": "Other"
+      },
+      "photo": [
+        {
+          "file_id": "AgACAgIAAxkBAB-1",
+          "file_unique_id": "AQADv",
+          "width": 90,
+          "height": 90,
+          "file_size": 1500
+        },
+        {
+          "file_id": "AgACAgIAAxkBAB-2",
+          "file_unique_id": "AQADv2",
+          "width": 1280,
+          "height": 960,
+          "file_size": 210000
+        }
+      ]
+    }
+  }
+}

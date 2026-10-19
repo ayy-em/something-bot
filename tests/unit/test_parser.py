@@ -107,6 +107,38 @@ def test_group_command_strips_bot_suffix_and_extracts_args() -> None:
     assert result.content.args == "please"
 
 
+def test_reply_to_message_is_parsed_one_level_deep() -> None:
+    result = parse_update(_load("group_command_reply_to_photo"))
+
+    assert isinstance(result, GroupMessage)
+    assert isinstance(result.content, CommandContent)
+    assert result.content.command == "/make_sticker"
+    assert result.reply_to is not None
+    assert result.reply_to.message_id == 30
+    assert isinstance(result.reply_to.content, PhotoContent)
+    assert result.reply_to.content.photo[-1].file_id == "AgACAgIAAxkBAB-2"
+
+
+def test_message_without_reply_has_no_reply_to() -> None:
+    assert parse_update(_load("group_text")).reply_to is None
+
+
+def test_reply_to_unmodelled_content_keeps_id_without_content() -> None:
+    raw = _load("group_text")
+    raw["message"]["reply_to_message"] = {
+        "message_id": 5,
+        "date": 1715850000,
+        "chat": raw["message"]["chat"],
+        "sticker": {"file_id": "s", "file_unique_id": "s-u", "width": 512, "height": 512},
+    }
+
+    result = parse_update(raw)
+
+    assert result.reply_to is not None
+    assert result.reply_to.message_id == 5
+    assert result.reply_to.content is None
+
+
 def test_supergroup_text_message_yields_supergroup_variant() -> None:
     result = parse_update(_load("supergroup_text"))
 

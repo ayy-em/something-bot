@@ -138,6 +138,17 @@ MessageContent = Annotated[
 # --------------------------------------------------------------------------- #
 
 
+class RepliedMessage(_Frozen):
+    """The message this one replies to (``reply_to_message``), one level deep.
+
+    ``content`` is ``None`` when the original's body isn't one of the
+    modelled kinds (a sticker, a service message, a forum-topic header).
+    """
+
+    message_id: int
+    content: MessageContent | None = None
+
+
 class _MessageBase(_Frozen):
     """Fields shared by every non-unsupported variant."""
 
@@ -146,6 +157,7 @@ class _MessageBase(_Frozen):
     chat_id: int
     date: int
     content: MessageContent
+    reply_to: RepliedMessage | None = None
 
 
 class PrivateMessage(_MessageBase):

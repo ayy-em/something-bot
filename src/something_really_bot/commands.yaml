@@ -32,7 +32,7 @@ features:
   # --- Slash commands ---
   - handler_name: make_sticker
     command: /make_sticker
-    description: "Convert an image into a Telegram sticker-ready PNG."
+    description: "Cut an image out into an outlined sticker PNG (caption or reply works too)."
     help_usage: /make_sticker
     show_in_menu: true
 

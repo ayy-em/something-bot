@@ -14,6 +14,7 @@ dependencies = [
     "google-cloud-bigquery>=3.41,<4",
     "google-cloud-storage>=3.10,<4",
     "httpx>=0.28,<0.29",
+    "numpy>=2.0,<3",
     "openai>=2.37,<3",
     "pillow>=11.0,<12",
     "psycopg[binary]>=3.2,<4",
@@ -21,6 +22,9 @@ dependencies = [
     "python-docx>=1.1,<2",
     "pydantic-settings>=2.14,<3",
     "pyyaml>=6.0,<7",
+    # Background removal for /make_sticker (#44). The [cpu] extra pulls
+    # onnxruntime; the model itself is baked into the image (Dockerfile).
+    "rembg[cpu]>=2.0.69,<3",
     "uvicorn[standard]>=0.47,<0.48",
     "yt-dlp>=2025.10,<2026",
 ]

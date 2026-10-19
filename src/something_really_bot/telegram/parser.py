@@ -20,6 +20,7 @@ from something_really_bot.telegram.models import (
     PhotoContent,
     PhotoSize,
     PrivateMessage,
+    RepliedMessage,
     SupergroupMessage,
     TextContent,
     UnsupportedUpdate,
@@ -213,6 +214,7 @@ def _build_chat_variant(
         "chat_id": chat["id"],
         "date": message.get("date"),
         "content": content,
+        "reply_to": _replied_message(message),
     }
 
     if chat_type == "private":
@@ -247,6 +249,13 @@ def _build_chat_variant(
     return UnsupportedUpdate(
         update_id=update_id, reason=f"unsupported_chat_type:{chat_type}", raw=message
     )
+
+
+def _replied_message(message: dict[str, Any]) -> RepliedMessage | None:
+    replied = message.get("reply_to_message")
+    if not isinstance(replied, dict) or not isinstance(replied.get("message_id"), int):
+        return None
+    return RepliedMessage(message_id=replied["message_id"], content=_extract_content(replied))
 
 
 def _user(message: dict[str, Any]) -> User | None:

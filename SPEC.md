@@ -701,7 +701,7 @@ explicit message so the bot isn't silent if config drifts.
 ## 6.13 Command Workflow State
 
 Command-driven features that take input across multiple turns
-(`/dutch`, `/make-sticker`, `/ocr`, `/summarize`) need to remember
+(`/dutch`, `/make_sticker`, `/ocr`, `/summarize`) need to remember
 "this user just invoked ``/foo`` and their next message is the input."
 This is captured in a shared Postgres table `public.pending_user_actions`,
 keyed on `(bot_id, chat_id, user_id)`:
@@ -753,23 +753,25 @@ the error matrix and lifecycle details.
 
 ---
 
-## 6.15 /make-sticker — Image to Sticker-Ready PNG (#44)
+## 6.15 /make_sticker — Image to Cut-Out Sticker PNG (#44)
 
-Two-turn command, **private chats only**, that converts an image into a
-Telegram-sticker-shaped PNG.
+Turns an image into a background-free, white-outlined PNG sized for
+Telegram's sticker uploader. Works in **private chats, groups and
+supergroups**. Input is a photo or an image file (any `image/*` except
+SVG). Three ways in:
 
-* `/make-sticker` — sets a pending action expecting an `image`, prompts
-  the user to send one.
-* Next photo from the same user within 10 minutes — handler downloads
-  it, stores the original under `sticker_requests/`, runs the Pillow
-  transform (resize to ≤ 512 px on the longer edge, convert to RGBA,
-  PNG encode), stores the output under `sticker_outputs/`, and replies
-  with `sendDocument` (not `sendPhoto`, to bypass Telegram's
-  re-compression).
+* **Two-turn** — `/make_sticker` sets a pending action expecting an
+  `image` for that (chat, user) and prompts; the same user's next
+  photo or image file in that chat within 10 minutes is the input.
+* **Caption** — a photo or image file captioned `/make_sticker`.
+* **Reply** — `/make_sticker` sent as a reply to a photo or image file.
 
-No automatic background removal in v1 — existing alpha is preserved,
-opaque sources stay opaque. rembg / OpenAI image-edit is a backlog
-candidate.
+The handler downloads the image, stores the original under
+`sticker_requests/`, runs the transform (scale up or down to 504 px on
+the longer edge → rembg `u2netp` background removal → 4 px white
+outline, giving exactly 512 px on the longer edge), stores the output
+under `sticker_outputs/`, and replies with `sendDocument` (not
+`sendPhoto`, to bypass Telegram's re-compression).
 
 `MakeStickerHandler` registers **before** `FileStorageHandler` so that
 a photo with a live pending row goes to the sticker pipeline rather
@@ -789,7 +791,7 @@ expecting an image; the next photo from the same user gets stored under
 reply in italics. The model returns the sentinel `NO_TEXT` when nothing
 readable is found; the handler translates that to a friendly fallback.
 
-Same dispatch precedence story as `/make-sticker`: `OCRHandler`
+Same dispatch precedence story as `/make_sticker`: `OCRHandler`
 registers before `FileStorageHandler` so a photo with a live pending
 `/ocr` row goes to the OCR pipeline instead of the generic file dump.
 

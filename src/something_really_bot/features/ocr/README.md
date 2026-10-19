@@ -73,7 +73,7 @@ live pending action still fall through to `FileStorageHandler`.
 
 ## Scope / restrictions
 
-* **Private chats only** — same constraint as `/make-sticker`.
+* **Private chats only.**
 * **No PDF or screenshot batches** — backlog if/when needed.
 * **No structured output** (markdown tables, JSON) — plain text only.
 

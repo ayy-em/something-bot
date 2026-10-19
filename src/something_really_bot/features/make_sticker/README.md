@@ -1,50 +1,107 @@
-# /make-sticker — image → Telegram sticker PNG (#44)
+# /make_sticker — image → cut-out, outlined sticker PNG (#44)
 
-Two-turn command that turns an image into a Telegram-sticker-shaped PNG
-(max 512 px on the longer edge, alpha-capable, aspect ratio preserved).
+Takes an image, cuts the subject out of its background and returns a
+white-outlined PNG sized for Telegram's sticker uploader (exactly 512 px
+on the longer edge, aspect ratio preserved).
+
+## Ways in
+
+Private chats, groups and supergroups alike. Input is a photo or an image
+file (`image/*` document, except SVG).
+
+| Invocation | What happens |
+| --- | --- |
+| `/make_sticker` | Sets `pending_user_actions(command="/make_sticker", expected_input="image")` for that (chat, user) and prompts. The same user's next photo / image file in that chat within 10 min is the input. |
+| Photo or image file captioned `/make_sticker` | Processed straight away. `/make-sticker` and `/make_sticker@Bot` work too. |
+| `/make_sticker` as a reply to a photo or image file | The replied-to image is processed straight away. |
+| `/make_sticker` as a reply to anything else | Same as the bare command: prompt. |
+
+Pending state is per (chat, user), so in a group only the person who
+sent `/make_sticker` arms the next upload, and only in that group.
+
+**Group privacy mode:** with BotFather privacy mode on, the bot only
+sees commands, replies to its own messages and mentions in groups. The
+caption and reply forms still work (they are commands); the two-turn
+form needs the follow-up photo to be a reply to the bot's prompt, or
+privacy mode off (or the bot as a group admin). Voice transcription in
+groups has the same requirement, so wherever that works, all three
+forms work.
+
+**Telegram inline mode (`@bot …` in any chat) is not supported and
+can't be:** inline queries carry text only, never an uploaded image.
 
 ## Flow
 
 ```
-/make-sticker            → set pending_user_actions(command="make-sticker",
-                                                    expected_input="image"),
-                            prompt
-  ↓ user sends a photo within 10 min
-                         → clear pending row
-                         → ack "Working on your sticker…"
-                         → schedule asyncio.create_task(_run_background)
-                              ├── telegram.get_file_path + download_file → bytes
-                              ├── gcs.upload at sticker_requests/{chat}/{msg}/input_{uniq}
-                              ├── transform(bytes) → StickerImage (Pillow, off-thread)
-                              ├── gcs.upload at sticker_outputs/{chat}/{msg}/sticker_{uniq}.png
-                              ├── telegram.send_document(png_bytes, "image/png", reply_to=msg)
-                              └── persistence.record_event("make_sticker_succeeded", ...)
+trigger (command / caption / reply / pending follow-up)
+  → clear our pending row (only if one is live)
+  → ack "Working on your sticker…"
+  → schedule asyncio.create_task(_run_background)
+       ├── telegram.get_file_path + download_file → bytes
+       ├── gcs.upload at sticker_requests/{chat}/{msg}/input_{uniq}
+       ├── transform(bytes) → StickerImage (off-thread)
+       ├── gcs.upload at sticker_outputs/{chat}/{msg}/sticker_{uniq}.png
+       ├── telegram.send_document(png_bytes, "image/png", reply_to=msg)
+       └── persistence.record_event("make_sticker_succeeded", ...)
 ```
 
-Failure at any step → mark the row failed (when persistence is wired),
-send one user-visible reply, swallow further send failures.
+`{msg}` is the triggering message (the command, or the captioned /
+follow-up photo). Failure at any step → one user-visible reply, a
+`make_sticker_failed` event, further send failures swallowed.
 
-## Transform behavior
+## Transform
 
-Built on Pillow. The transform is **resize + convert to RGBA + PNG**:
+`transform.py`, in this order:
 
-* Source decoded with `Image.open` (any format Pillow understands —
-  JPEG, PNG, WebP, BMP, GIF first-frame, HEIC if `pillow-heif` is
-  available; not currently installed).
-* Converted to RGBA. Sources with existing alpha keep it; opaque sources
-  get an opaque alpha channel (no automatic background removal — see
-  out-of-scope below).
-* Resized so the longer edge is at most 512 px via Pillow's `thumbnail`
-  with Lanczos resampling. **Does not upscale** — a 64×32 input stays
-  64×32.
-* Saved as PNG with `optimize=True`.
+1. **Decode.** Pillow, any format it understands (JPEG, PNG, WebP, BMP,
+   GIF first frame). JPEGs far larger than needed are decoded at reduced
+   scale (`Image.draft`). EXIF orientation is applied, so phone photos
+   sent as files don't come out sideways.
+2. **Fit.** Scale up *or* down with Lanczos so the longer edge is
+   504 px (512 − 2 × 4 px outline). A 64×32 input becomes 504×252.
+3. **Cut out.** rembg with the `u2netp` model. An all-transparent result
+   raises `NoSubjectError`.
+4. **Outline.** Threshold the alpha at 50 %, dilate it with a 4 px
+   round brush, blur 0.75 px for anti-aliasing, fill white, and composite
+   the cut-out on top. The canvas grows by 4 px per side, so the result
+   is exactly 512 px on the longer edge. Subjects touching the frame get
+   the border along the frame edge too.
+5. **Encode.** PNG, `optimize=True`.
+
+### Why `u2netp`, not rembg's default `u2net`
+
+Measured on 1 vCPU, CPU memory arena off (on top of the ~100 MB app):
+
+| Model | Size | Resident after load | Peak |
+| --- | --- | --- | --- |
+| `u2net` | 176 MB | 655 MB | 945 MB |
+| `isnet-general-use` | 179 MB | 627 MB | 1.17 GB |
+| `u2netp` | 4.7 MB | 293 MB | 548 MB |
+
+The service runs on 1 GiB (see `infra/terraform/variables.tf`), so only
+`u2netp` fits. Cut-out quality on portraits and objects is close to
+`u2net`; it is rougher on busy backgrounds. Switching models means
+changing `REMBG_MODEL`, the session class in the Dockerfile (a unit test
+keeps them in sync), and almost certainly the instance memory.
+
+Memory controls in code:
+
+* The onnxruntime CPU memory arena is **off**. With it on, RSS grew by
+  ~250 MB per inference (measured with `u2net`) and never came back.
+* A process-wide lock allows one inference at a time.
+* rembg is imported lazily on the first sticker (~240 MB of
+  onnxruntime / scipy / scikit-image / OpenCV), so instances that never
+  make a sticker never pay for it. The first sticker after a cold start
+  takes a couple of seconds longer.
+
+The model is baked into the image at `/app/.u2net` (`U2NET_HOME`) so a
+cold start never downloads it from GitHub.
 
 ## Delivery
 
-Sent back via Telegram's `sendDocument` (not `sendPhoto`) so Telegram
-doesn't re-compress and strip the alpha channel. Recipients see the
-PNG as a file attachment, which is the right shape if they want to add
-it to a sticker pack.
+Sent via `sendDocument` (not `sendPhoto`) so Telegram doesn't
+re-compress the PNG and strip the alpha channel. To turn it into a real
+sticker, forward the file to `@Stickers`.
 
 ## GCS layout
 
@@ -58,41 +115,38 @@ backlog if storage volume ever becomes a concern.
 
 ## Dispatch precedence
 
-`MakeStickerHandler` is registered **before** `FileStorageHandler`.
-That way:
-
-* User invokes `/make-sticker` → handler claims the trigger and sets
-  the pending row.
-* User uploads a photo: with the pending row present, the sticker
-  handler's `matches()` claims the photo. Without a pending row, the
-  match fails and `FileStorageHandler` picks the photo up as a generic
-  upload.
+`MakeStickerHandler` is registered **before** `FileStorageHandler`, so
+a private photo that belongs to a sticker request (caption, pending row)
+reaches this handler. Anything else falls through to
+`FileStorageHandler` as a generic upload.
 
 ## Error matrix
 
-| Failure                              | User-visible reply                                                                              |
-| ------------------------------------ | ----------------------------------------------------------------------------------------------- |
-| `TelegramFileError` on download      | `Couldn't pull that image from Telegram. Try sending it again in a moment.`                     |
-| `StickerTransformError`              | `Couldn't turn that into a sticker. The image might be corrupted or in an unusual format. Try a different one.` |
-| GCS upload / `TelegramSendError`     | `Something went wrong handling that image. Logged.`                                             |
+| Failure | User-visible reply |
+| --- | --- |
+| `TelegramFileError` on download | `Couldn't pull that image from Telegram. Try sending it again in a moment.` |
+| `NoSubjectError` | `Couldn't find anything to cut out in that image. Try one with a clear subject.` |
+| `StickerTransformError` | `Couldn't turn that into a sticker. The image might be corrupted or in an unusual format. Try a different one.` |
+| GCS upload / `TelegramSendError` | `Something went wrong handling that image. Logged.` |
 
 ## Scope / restrictions
 
-* **Private chats only.** Per-user pending state in a group is awkward
-  (whose photo wins?) — group `/make-sticker` would need richer
-  routing and is out of scope.
-* **No automatic background removal.** v1 preserves existing alpha but
-  doesn't try to cut out subjects. Backlog candidate: rembg or OpenAI
-  image edit.
-* **No multi-image messages.** Telegram delivers a media group as
-  separate updates per image — the handler takes the first one that
-  arrives while the pending state is live, and clears state.
+* **No media groups.** Telegram delivers an album as one update per
+  image; the pending row is cleared by the first one, and a caption
+  only rides on one of them.
+* **No auto-crop to the subject.** rembg leaves the transparent area
+  where the background was, so a small subject in a wide shot stays
+  small inside the 512 px frame.
 
 ## Tests
 
-* `tests/unit/features/test_make_sticker_handler.py` — 14 tests:
-  match rules, command sets pending + prompts, full happy path (input
-  + output uploaded + sendDocument + persistence event), download
-  failure, transform failure, sendDocument failure, plus four Pillow
-  transform unit tests (resize, no-upscale, alpha preservation,
-  non-image input rejection).
+* `tests/unit/features/test_make_sticker_handler.py`: transform
+  (up/downscale, fit size handed to rembg, outline geometry and
+  crispness, EXIF, empty cut-out, bad input, Dockerfile/model sync) with
+  a stub background remover; matching for private / group / supergroup,
+  caption, reply, pending and image documents; prompt, happy paths and
+  every error branch.
+* `tests/unit/test_parser.py`: `reply_to_message` parsing.
+
+The real rembg model is not exercised in unit tests (no model download
+in CI).

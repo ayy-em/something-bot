@@ -124,7 +124,7 @@ To add, remove, or reorder features, edit `commands.yaml`. A CI test enforces ev
 | `/help` | Show available commands |
 | `/next-reunion [YYYY-MM-DD]` | Set or view the next reunion date |
 | `/dutch` | Translate Dutch text to English |
-| `/make-sticker` | Convert an image to sticker-ready PNG |
+| `/make_sticker` | Cut an image out into an outlined sticker PNG (also as a photo caption or a reply) |
 | `/ocr` | Extract text from an image |
 | `/summarize` | TL;DR a document |
 
