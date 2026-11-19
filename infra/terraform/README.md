@@ -100,6 +100,16 @@ echo -n "<random-secret-string>" \
 Do the same for `telegram-bot-token-default`, `telegram-qa-users`, and
 `OPENAI_API_KEY` if their values are not already set.
 
+`ELEVENLABS_API_KEY` (parody-roast TTS) is created by Terraform as an
+empty placeholder. Add its value the same way; until a version exists,
+`deploy.yml` leaves it unmapped and the bot falls back to OpenAI TTS:
+
+```bash
+read -rs KEY && printf '%s' "$KEY" \
+  | gcloud secrets versions add ELEVENLABS_API_KEY \
+      --project=something-bot-338300 --data-file=- && unset KEY
+```
+
 ## CI gates (#29)
 
 The repository's GitHub Actions `_checks.yml` workflow runs five gates on

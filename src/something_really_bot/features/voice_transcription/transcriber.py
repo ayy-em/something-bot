@@ -12,8 +12,9 @@ with (2) and are pure garnish (#63):
 
 3. ``chat.completions.create`` with the parody model for a <=100 word
    roast written in the speaker's own voice.
-4. ``audio.speech.create`` to vocalize that roast as Ogg/Opus, ready to
-   go straight back to Telegram as a voice message.
+4. Text-to-speech to vocalize that roast as Ogg/Opus, ready to go
+   straight back to Telegram as a voice message. The provider
+   (ElevenLabs by default, or OpenAI) lives in :mod:`.speech`.
 
 Network failures funnel into :class:`TranscriptionError` /
 :class:`AnalysisError` so the handler can map them to user-facing
@@ -30,8 +31,26 @@ from functools import lru_cache
 from openai import AsyncOpenAI
 from pydantic import SecretStr
 
-from something_really_bot.config import get_settings
+from something_really_bot.config import Settings, get_settings
+from something_really_bot.features.voice_transcription.speech import (
+    SPEECH_TIMEOUT_SECONDS,
+    ElevenLabsSpeechSynthesizer,
+    OpenAISpeechSynthesizer,
+    SpeechError,
+    SpeechSynthesizer,
+)
 from something_really_bot.logging import get_logger
+
+__all__ = [
+    "Analysis",
+    "AnalysisError",
+    "ParodyError",
+    "SpeechError",
+    "TranscriptionError",
+    "VoiceTranscriber",
+    "build_speech_synthesizer",
+    "get_voice_transcriber",
+]
 
 _logger = get_logger(__name__)
 
@@ -44,11 +63,6 @@ TRANSCRIBE_MODEL = "gpt-transcribe"
 ANALYSIS_TIMEOUT_SECONDS = 25.0
 TRANSCRIBE_TIMEOUT_SECONDS = 60.0
 PARODY_TIMEOUT_SECONDS = 30.0
-SPEECH_TIMEOUT_SECONDS = 45.0
-# Ogg-encapsulated Opus is exactly what Telegram's sendVoice wants, so the
-# TTS output goes back out as a real voice message rather than a file
-# attachment.
-SPEECH_RESPONSE_FORMAT = "opus"
 # A 4-minute memo produced a roast that was a chore to sit through, so the
 # ceiling is deliberately brutal: this is a punchline, not a summary.
 #
@@ -97,23 +111,6 @@ _PARODY_SYSTEM_PROMPT = (
     "directions, no preamble. Your entire reply is spoken aloud verbatim."
 )
 
-# The TTS model steers on accent, emotional range, intonation, impressions,
-# speed and tone — so the performance note is written along those axes
-# rather than as one adjective. A flat read kills the joke no matter how
-# good the words are.
-_SPEECH_INSTRUCTIONS = (
-    "Voice: a smug theatrical impressionist doing a merciless impersonation "
-    "of the person who recorded the original memo.\n"
-    "Delivery: wildly over-committed. Stretch the vowels on any word the "
-    "speaker was clearly proud of. Sneer lightly through the self-important "
-    "parts. Let a small, self-satisfied laugh colour the delivery.\n"
-    "Pacing: fast and impatient, tumbling downhill toward the punchline — "
-    "then a deliberate pause before the final line.\n"
-    "Intonation: swooping and melodramatic through the middle, collapsing "
-    "into flat, bored deadpan on the last sentence.\n"
-    "Emotion: enormous confidence, zero self-awareness."
-)
-
 
 def _trim_to_words(text: str, max_words: int) -> str:
     """Enforce the word ceiling the model keeps overshooting.
@@ -145,10 +142,6 @@ class ParodyError(Exception):
     """Raised when the OpenAI chat completion for the parody roast fails."""
 
 
-class SpeechError(Exception):
-    """Raised when OpenAI text-to-speech fails."""
-
-
 @dataclass(frozen=True)
 class Analysis:
     """Output of the summary+emotion call."""
@@ -169,6 +162,7 @@ class VoiceTranscriber:
         tts_model: str = "gpt-4o-mini-tts",
         tts_voice: str = "marin",
         client: AsyncOpenAI | None = None,
+        synthesizer: SpeechSynthesizer | None = None,
         transcribe_timeout_seconds: float = TRANSCRIBE_TIMEOUT_SECONDS,
         analysis_timeout_seconds: float = ANALYSIS_TIMEOUT_SECONDS,
         parody_timeout_seconds: float = PARODY_TIMEOUT_SECONDS,
@@ -176,13 +170,16 @@ class VoiceTranscriber:
     ) -> None:
         self._chat_model = chat_model
         self._parody_model = parody_model
-        self._tts_model = tts_model
-        self._tts_voice = tts_voice
         self._client = client or AsyncOpenAI(api_key=api_key.get_secret_value())
+        self._synthesizer: SpeechSynthesizer = synthesizer or OpenAISpeechSynthesizer(
+            self._client,
+            model=tts_model,
+            voice=tts_voice,
+            timeout_seconds=speech_timeout_seconds,
+        )
         self._transcribe_timeout = transcribe_timeout_seconds
         self._analysis_timeout = analysis_timeout_seconds
         self._parody_timeout = parody_timeout_seconds
-        self._speech_timeout = speech_timeout_seconds
 
     async def transcribe(self, audio_bytes: bytes, *, filename: str) -> str:
         """Transcribe ``audio_bytes`` and return the text."""
@@ -289,30 +286,32 @@ class VoiceTranscriber:
 
     async def synthesize(self, text: str) -> bytes:
         """One TTS call → Ogg/Opus audio bytes for Telegram's sendVoice."""
-        try:
-            response = await asyncio.wait_for(
-                self._client.audio.speech.create(
-                    model=self._tts_model,
-                    voice=self._tts_voice,
-                    input=text,
-                    instructions=_SPEECH_INSTRUCTIONS,
-                    response_format=SPEECH_RESPONSE_FORMAT,
-                ),
-                timeout=self._speech_timeout,
-            )
-        except TimeoutError as exc:
-            raise SpeechError(f"Speech synthesis timed out after {self._speech_timeout}s") from exc
-        except Exception as exc:  # noqa: BLE001
-            _logger.warning(
-                "voice_speech_call_failed",
-                extra={"exception_type": type(exc).__name__},
-            )
-            raise SpeechError(str(exc)) from exc
+        return await self._synthesizer.synthesize(text)
 
-        audio = getattr(response, "content", None)
-        if not isinstance(audio, bytes) or not audio:
-            raise SpeechError("Speech synthesis returned no audio")
-        return audio
+
+def build_speech_synthesizer(settings: Settings, client: AsyncOpenAI) -> SpeechSynthesizer:
+    """Pick the roast's TTS provider from ``settings.tts_provider``.
+
+    ElevenLabs is the default. If it is selected but ``ELEVENLABS_API_KEY``
+    is missing, fall back to OpenAI (already required for the transcript)
+    with a warning, so a key rollout never silently kills the roast.
+    """
+    if settings.tts_provider == "elevenlabs":
+        if settings.elevenlabs_api_key is not None:
+            return ElevenLabsSpeechSynthesizer(
+                settings.elevenlabs_api_key,
+                voice_id=settings.elevenlabs_voice_id,
+                model_id=settings.elevenlabs_model_id,
+            )
+        _logger.warning(
+            "tts_provider_fallback",
+            extra={"requested": "elevenlabs", "using": "openai", "reason": "no api key"},
+        )
+    return OpenAISpeechSynthesizer(
+        client,
+        model=settings.openai_tts_model,
+        voice=settings.openai_tts_voice,
+    )
 
 
 @lru_cache(maxsize=1)
@@ -321,10 +320,11 @@ def get_voice_transcriber() -> VoiceTranscriber | None:
     settings = get_settings()
     if settings.openai_api_key is None:
         return None
+    client = AsyncOpenAI(api_key=settings.openai_api_key.get_secret_value())
     return VoiceTranscriber(
         api_key=settings.openai_api_key,
         chat_model=settings.openai_model,
         parody_model=settings.openai_parody_model,
-        tts_model=settings.openai_tts_model,
-        tts_voice=settings.openai_tts_voice,
+        client=client,
+        synthesizer=build_speech_synthesizer(settings, client),
     )
