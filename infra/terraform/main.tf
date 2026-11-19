@@ -274,6 +274,23 @@ resource "google_secret_manager_secret" "manual_job_token" {
   depends_on = [google_project_service.enabled]
 }
 
+# ElevenLabs API key for the parody-roast TTS. Placeholder only — add the
+# version out-of-band, never in Terraform state:
+#   printf '%s' "<key>" | gcloud secrets versions add ELEVENLABS_API_KEY \
+#     --project=<project> --data-file=-
+# deploy.yml only maps it into Cloud Run once a version exists; until then
+# the app falls back to OpenAI TTS.
+resource "google_secret_manager_secret" "elevenlabs_api_key" {
+  project   = var.project_id
+  secret_id = "ELEVENLABS_API_KEY"
+
+  replication {
+    auto {}
+  }
+
+  depends_on = [google_project_service.enabled]
+}
+
 # --------------------------------------------------------------------------- #
 # Secret access for the Cloud Run runtime service account
 # --------------------------------------------------------------------------- #
@@ -317,6 +334,21 @@ resource "google_secret_manager_secret_iam_member" "cloudrun_openai" {
   secret_id = data.google_secret_manager_secret.openai_api_key.secret_id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.cloudrun.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "cloudrun_elevenlabs" {
+  project   = var.project_id
+  secret_id = google_secret_manager_secret.elevenlabs_api_key.secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.cloudrun.email}"
+}
+
+# deploy.yml probes this secret to decide whether to map it into Cloud Run.
+resource "google_secret_manager_secret_iam_member" "deployer_elevenlabs" {
+  project   = var.project_id
+  secret_id = google_secret_manager_secret.elevenlabs_api_key.secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.deployer.email}"
 }
 
 resource "google_secret_manager_secret_iam_member" "cloudrun_postgres_dsn" {
@@ -483,6 +515,7 @@ resource "google_cloud_run_v2_service" "main" {
     google_secret_manager_secret_iam_member.cloudrun_qa_users,
     google_secret_manager_secret_iam_member.cloudrun_webhook_secret,
     google_secret_manager_secret_iam_member.cloudrun_openai,
+    google_secret_manager_secret_iam_member.cloudrun_elevenlabs,
     google_secret_manager_secret_iam_member.cloudrun_postgres_dsn,
     google_secret_manager_secret_iam_member.cloudrun_postgres_instance,
     google_secret_manager_secret_iam_member.cloudrun_something_group_chat_id,

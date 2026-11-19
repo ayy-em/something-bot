@@ -35,7 +35,7 @@ incoming voice message (private, group, supergroup)
         │     └── roast (#63), concurrently:
         │           ├── openai.chat.completions.create (parody model)
         │           │     → ~25 word TL;DR in the speaker's voice
-        │           └── openai.audio.speech.create(response_format="opus")
+        │           └── TTS (speech.py): ElevenLabs (default) or OpenAI
         │                 → Ogg/Opus bytes
         ├── jobs.update_status(id, "sending")
         ├── if reply fits in 4096 chars:
@@ -135,9 +135,9 @@ threshold that gates the summary. Both read the transcript and neither
 needs the other's output, so they run under one `asyncio.gather`;
 serializing them would add a whole chat round-trip to the wait.
 
-Two calls: `openai_parody_model` writes the roast, `openai_tts_model`
-speaks it in `openai_tts_voice`. Defaults are `gpt-5.2`,
-`gpt-4o-mini-tts` and `marin`. The parody model is deliberately *not*
+Two calls: `openai_parody_model` (default `gpt-5.2`) writes the roast,
+then a TTS provider speaks it. The provider is switchable via
+`TTS_PROVIDER` (see [TTS providers](#tts-providers)). The parody model is deliberately *not*
 `Settings.openai_model` — that one is shared with the chat fallback and
 OCR, and comic timing wants a stronger model than those need.
 
@@ -163,12 +163,30 @@ boundary so a clipped roast still sounds finished. Typical output is
 shipped at 100 words and produced a ~20 second clip that was a chore to
 sit through.
 
-The TTS call carries its own `instructions`, written along the axes the
+### TTS providers
+
+`speech.py` defines a `SpeechSynthesizer` protocol with two
+implementations; `build_speech_synthesizer` picks one from settings.
+Both return Ogg/Opus, so the handler is provider-agnostic.
+
+| `TTS_PROVIDER` | Call | Config |
+| --- | --- | --- |
+| `elevenlabs` (default) | `POST /v1/text-to-speech/{voice_id}?output_format=opus_48000_64` via httpx | `ELEVENLABS_API_KEY` (secret), `ELEVENLABS_VOICE_ID` (default `XNrB7jz2HCkpU5yK08kP`), `ELEVENLABS_MODEL_ID` (default `eleven_multilingual_v2`) |
+| `openai` | `audio.speech.create(response_format="opus")` | `OPENAI_TTS_MODEL` (`gpt-4o-mini-tts`), `OPENAI_TTS_VOICE` (`marin`) |
+
+If `elevenlabs` is selected but `ELEVENLABS_API_KEY` is unset, the app
+logs `tts_provider_fallback` and uses OpenAI, so the roast survives a
+key rollout. Any provider failure raises `SpeechError` and is handled
+like every other roast failure.
+
+The OpenAI TTS call carries its own `instructions`, written along the axes the
 model actually steers on — voice, delivery, pacing, intonation, emotion
 — rather than as a single adjective. A flat read kills the joke no
 matter how good the words are.
 
-`response_format="opus"` gives Ogg/Opus, which is exactly what
+ElevenLabs has no equivalent field; delivery comes from the voice.
+
+`response_format="opus"` (OpenAI) / `opus_48000_64` (ElevenLabs) give Ogg/Opus, which is exactly what
 `sendVoice` needs to render a real voice bubble instead of a file
 attachment.
 
@@ -243,12 +261,15 @@ and document uploads still route to `FileStorageHandler` as before.
 
 None on top of what `#42` already required:
 
-* `OPENAI_API_KEY` is the existing secret. No new secrets.
-* No Terraform changes — Cloud Run resource bumps from #42 cover us.
+* `OPENAI_API_KEY` is the existing secret.
+* `ELEVENLABS_API_KEY` is a Terraform-managed placeholder secret; its
+  value is added out-of-band. `deploy.yml` maps it into Cloud Run only
+  once a version exists.
 * Postgres wiring from #31 is reused. The two `parody_*` columns are
   added by `ensure_table()` via `ADD COLUMN IF NOT EXISTS`, so the live
   DB picks them up on the first memo after deploy — no migration step.
-* `OPENAI_PARODY_MODEL`, `OPENAI_TTS_MODEL` and `OPENAI_TTS_VOICE` are
+* `TTS_PROVIDER`, `ELEVENLABS_VOICE_ID`, `ELEVENLABS_MODEL_ID`,
+  `OPENAI_PARODY_MODEL`, `OPENAI_TTS_MODEL` and `OPENAI_TTS_VOICE` are
   plain env vars with working defaults; set them only to override.
 
 Note that group members must allow voice messages from the bot for the
@@ -274,5 +295,9 @@ unaffected.
   plus the roast call (own model, no JSON envelope, truncation, empty
   and SDK-error paths) and the TTS call (model/voice/format/instructions,
   empty-audio and SDK-error paths).
+* `tests/unit/features/test_voice_transcription_speech.py` — ElevenLabs
+  request shape (voice path, opus format, key header, body), HTTP-error,
+  empty-audio, transport-error and timeout paths; provider selection
+  including the missing-key fallback.
 * `tests/unit/telegram/test_client.py` — `sendVoice` multipart body,
   `ok=false` and HTTP-error paths.

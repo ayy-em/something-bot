@@ -103,6 +103,21 @@ jobs:
           echo "::add-mask::${conn}"
           echo "connection=${conn}" >> "$GITHUB_OUTPUT"
 
+      - name: Resolve optional secrets
+        # ELEVENLABS_API_KEY is optional: mapping a secret with no version
+        # into Cloud Run fails the deploy, so only map it once a version
+        # exists. Without it the app falls back to OpenAI TTS.
+        id: optional_secrets
+        run: |
+          extra=""
+          if gcloud secrets versions access latest \
+              --project="${PROJECT_ID}" --secret=ELEVENLABS_API_KEY >/dev/null 2>&1; then
+            extra=",ELEVENLABS_API_KEY=ELEVENLABS_API_KEY:latest"
+          else
+            echo "::notice::ELEVENLABS_API_KEY has no accessible version; roast TTS falls back to OpenAI."
+          fi
+          echo "extra=${extra}" >> "$GITHUB_OUTPUT"
+
       - name: Resolve Cloud Run service URL
         id: svc_url
         run: |
@@ -120,7 +135,7 @@ jobs:
             --image="${{ steps.image.outputs.sha_tag }}" \
             --service-account="${RUNTIME_SA}" \
             --add-cloudsql-instances="${{ steps.cloudsql.outputs.connection }}" \
-            --set-secrets="TELEGRAM_WEBHOOK_SECRET=telegram-webhook-secret-default:latest,TELEGRAM_BOT_TOKEN=telegram-bot-token-default:latest,TELEGRAM_QA_USERS=telegram-qa-users:latest,OPENAI_API_KEY=OPENAI_API_KEY:latest,POSTGRES_DSN=POSTGRES_DSN:latest,POSTGRES_INSTANCE=POSTGRES_INSTANCE:latest,SOMETHING_GROUP_CHAT_ID=SOMETHING_GROUP_CHAT_ID:latest,GOOGLE_OAUTH_SECRET_JSON=GOOGLE_OAUTH_SECRET_JSON:latest,GOOGLE_OAUTH_CLIENT_ID=GOOGLE_OAUTH_CLIENT_ID:latest,GSC_OAUTH_REFRESH_TOKEN=GSC_OAUTH_REFRESH_TOKEN:latest,MANUAL_JOB_TOKEN=manual-job-token:latest" \
+            --set-secrets="TELEGRAM_WEBHOOK_SECRET=telegram-webhook-secret-default:latest,TELEGRAM_BOT_TOKEN=telegram-bot-token-default:latest,TELEGRAM_QA_USERS=telegram-qa-users:latest,OPENAI_API_KEY=OPENAI_API_KEY:latest,POSTGRES_DSN=POSTGRES_DSN:latest,POSTGRES_INSTANCE=POSTGRES_INSTANCE:latest,SOMETHING_GROUP_CHAT_ID=SOMETHING_GROUP_CHAT_ID:latest,GOOGLE_OAUTH_SECRET_JSON=GOOGLE_OAUTH_SECRET_JSON:latest,GOOGLE_OAUTH_CLIENT_ID=GOOGLE_OAUTH_CLIENT_ID:latest,GSC_OAUTH_REFRESH_TOKEN=GSC_OAUTH_REFRESH_TOKEN:latest,MANUAL_JOB_TOKEN=manual-job-token:latest${{ steps.optional_secrets.outputs.extra }}" \
             --set-env-vars="SCHEDULER_SERVICE_ACCOUNT_EMAIL=something-bot-scheduler-sa@${PROJECT_ID}.iam.gserviceaccount.com,SCHEDULER_ADDITIONAL_EMAILS=${{ secrets.GCP_DEPLOYER_SERVICE_ACCOUNT }},OPENAI_CONTEXT_BUCKET=something-bot-openai-context,CLOUD_RUN_URL=${{ steps.svc_url.outputs.url }}" \
             --quiet
 

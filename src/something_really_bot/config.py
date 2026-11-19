@@ -9,7 +9,7 @@ the service fails fast instead of starting in a half-configured state
 
 import json
 from functools import lru_cache
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
@@ -101,6 +101,30 @@ class Settings(BaseSettings):
             "alloy, ash, ballad, coral, echo, fable, nova, onyx, sage, "
             "shimmer, verse, marin, cedar; marin and cedar are the "
             "highest-quality pair."
+        ),
+    )
+    # --- Parody roast TTS provider ---
+    tts_provider: Literal["elevenlabs", "openai"] = Field(
+        default="elevenlabs",
+        description=(
+            "Which text-to-speech provider speaks the parody roast. "
+            "``elevenlabs`` falls back to ``openai`` (with a warning) when "
+            "ELEVENLABS_API_KEY is unset."
+        ),
+    )
+    elevenlabs_api_key: SecretStr | None = Field(
+        default=None,
+        description="ElevenLabs API key, from the ELEVENLABS_API_KEY secret.",
+    )
+    elevenlabs_voice_id: str = Field(
+        default="XNrB7jz2HCkpU5yK08kP",
+        description="ElevenLabs voice used for the parody roast.",
+    )
+    elevenlabs_model_id: str = Field(
+        default="eleven_multilingual_v2",
+        description=(
+            "ElevenLabs TTS model. ``eleven_multilingual_v2`` because memos "
+            "arrive in several languages and the roast replies in kind."
         ),
     )
     openai_context_bucket: str | None = Field(
